@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Send a payout · Conduit Console{% endblock %}
+{% block body %}
+{% call m.page_head('transact', 'Single payment') %}
+  <a class="btn" href="{{ '/customers/' ~ customer_id ~ '/payouts' if customer_id else '/payouts' }}">Back to the fork</a>
+{% endcall %}
+<p class="muted lede">
+  {% if customer_id %}Customer
+  <a href="/customers/{{ customer_id }}">{{ customer_name or customer_id }}</a>{% if customer_name %}
+  <code>{{ customer_id }}</code>{% endif %}. {% endif %}Every field below comes from
+  <code>GET /v2/payouts/requirements</code> for the route you pick —
+  this console never assumes which rail, document or recipient a purpose needs.
+</p>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+{# No `rm` = discovery did not answer, so there is no submit form on this
+   page and nothing to hold what was typed. Say so instead of silently
+   dropping it. #}
+{% if not rm %}{{ m.lost_inputs(reference, amount) }}{% endif %}
+
+{# THE ROUTE ROW. Five controls on one line, and the form below is whatever
+   Conduit's requirements for them turn out to be.
+
+   The purpose is a field of this payment, not a gate in front of it: it used to
+   be a screen of seven buttons that had to be pressed before anything else
+   existed, which made the commonest thing an operator does a two-page errand.
+   Its wire value stays on screen (`raw`) because that is what Conduit's own
+   errors speak, and the sentence under the row is the selected purpose's own.
+
+   `hx-trigger="change from:#route-fields"` is the refetch, and it is scoped to
+   the FOUR route controls on purpose: the funding account is in this row and in
+   this request, but changing it cannot change the shape of anything discovery
+   answers — `GET /v2/payouts/requirements` never sees it — so triggering on it
+   spent a round trip re-reading a response that was already correct. The form
+   below still gets the new account because it reads the live row
+   (`hx-include`) rather than a hidden copy of it. `hx-push-url` keeps the
+   widening query string in the address bar, which is this flow's whole
+   linkability story — and because the trigger is `change` and not `submit`, the
+   button below still works as a plain GET with JavaScript off. #}
+<div class="bar">
+  {# The action is the GLOBAL route on both entry points: the customer
+     is a control in this row now, so it travels as `customer_id` rather than as
+     a prefix of the URL. The customer-scoped URL still serves this exact page.
+     The customer gets its own `change` clause rather than joining
+     `#route-fields`, because that span means "the controls discovery answers
+     to" and the customer is not one of them — it changes which ACCOUNTS and
+     which whitelist are read, which is a re-render for a different reason. #}
+  <form id="route-row" class="stack" method="get"
+        action="/payouts/new"
+        hx-get="/payouts/new"
+        hx-trigger="change from:#route-fields, change from:#customer_id"
+        hx-target="main" hx-select="main"
+        hx-swap="outerHTML"
+        hx-push-url="true" hx-sync="this:replace" hx-indicator="#route-working">
+    {# Two LINES in one tray, because the row grew to six
+       controls and the first one is not like the others: the customer re-renders
+       this page for a different reason than the route controls (see the comment
+       above), and at 1280px a single flex line wrapped at whatever control
+       happened to hit the edge — the layout now says what the trigger comment
+       says. One form still: who and the route travel in the same GET, so the
+       break is a line, not a divider. #}
+    {# The chosen contact, carried by the ROUTE ROW rather than by the payout form
+       below (where it used to sit, inside the save section). It has to survive a
+       route change: a "Pay a contact" hand-off arrives with the contact and only
+       the part of the route the console could prove, so answering the rest here
+       is the normal next step — and a hidden field the row does not carry is a
+       contact silently dropped on the way. One field, still: the payout form
+       submits it through `hx-include="#route-row"`, exactly as it submits the
+       purpose and the rail. #}
+    <input type="hidden" name="counterparty" value="{{ chosen_counterparty }}">
+    <div class="row">
+      {# Step 1's first control: whose money is moving. Names-first, the house
+         datalist — `GET /v2/customers` has no name or search parameter, so a name
+         can only become an id in the browser. Suggestion, never a constraint. #}
+      <label>Customer
+        <input type="text" id="customer_id" name="customer_id" value="{{ customer_id }}"
+               placeholder="cus_…" list="known-customers" size="26">
+      </label>
+      {{ m.customer_datalist(customers) }}
+    </div>
+    <div class="row">
+    {# The four controls discovery actually answers to. Wrapped so the trigger
+       above can name them; the funding account sits outside deliberately. #}
+    <span id="route-fields" class="row">
+    <label>Purpose
+      <select id="purpose" name="purpose" required{{ m.err_attrs_named(field_errors, 'purpose') }}>
+        <option value="">—</option>
+        {# Label only in the OPTION — the one enum in this console whose labels
+           are sentence-length ("Payment for goods or services"), so
+           `enum_option`'s "— raw_key" suffix made the closed control read as a
+           paragraph. The raw key is not lost: it is the `.raw` mono in the
+           sentence under this row, which is where an operator matching the
+           screen against Conduit's own error goes looking. `value` is the key,
+           unchanged and still the only thing submitted (QA F-002). #}
+        {% for value, description in purposes %}
+          <option value="{{ value }}" {{ 'selected' if value == route.purpose }}>{{ enum_label(value) }}</option>
+        {% endfor %}
+      </select>
+      {{ m.field_error(field_errors, 'purpose') }}
+    </label>
+    <label>Rail
+      <select name="rail" required>
+        <option value="">—</option>
+        {# Rails stay verbatim on purpose: `ach`, `rtp` and `sepa` are acronyms an
+           operator already speaks, and "Rtp" is a worse word for one than `rtp`. #}
+        {% for value in rails %}
+          <option value="{{ value }}" {{ 'selected' if value == route.rail }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Recipient type
+      <select name="recipientType" required>
+        <option value="">—</option>
+        {% for value in recipient_types %}
+          <option value="{{ value }}" {{ 'selected' if value == route.recipient_type }}>{{ enum_option(value) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Destination country
+      <input type="text" name="destinationCountry" value="{{ route.country }}"
+             placeholder="USA or United States" size="18" required list="iso-countries">
+    </label>
+    {{ m.country_datalist() }}
+    </span>
+    <label>Funded from
+      {# The funding account is part of the route: it states the currency the
+         amount is in, and this rail may not be able to carry it. Disabled, not
+         hidden, when it cannot — an account that vanished from a
+         picker is an account the operator goes looking for. #}
+      <select id="virtualAccountId" name="virtualAccountId"{{ m.err_attrs_named(field_errors, 'virtualAccountId') }}>
+        {% for item in accounts %}
+          <option value="{{ item.id }}" {{ 'disabled' if doomed_accounts.get(item.id) }}
+                  {{ 'selected' if account and item.id == account.id }}>
+            {{ item.id }} · {{ item.asset.code if item.asset else '' }}
+            {%- if doomed_accounts.get(item.id) %} — not on {{ route.rail }}{% endif %}
+          </option>
+        {% else %}
+          {# Three facts, not two: nobody picked, "there are none", and "we could
+             not ask". The first asserts nothing about anybody — no read was
+             made. #}
+          <option value="">{{ 'pick the customer first' if not customer_id
+                              else ('no active virtual account' if accounts_listed
+                                    else 'virtual accounts could not be read') }}</option>
+        {% endfor %}
+      </select>
+      {{ m.field_error(field_errors, 'virtualAccountId') }}
+    </label>
+    {% if customer_id and not accounts and not accounts_listed %}
+      <div class="err">
+        Either Conduit could not be read, or the accounts have changed status — this console
+        cannot tell which, so it is <em>not</em> saying this customer has none. See the problem
+        above; reload before requesting an account.
+      </div>
+    {% endif %}
+    <button type="submit">Load requirements</button>
+    {{ m.working('Loading requirements…', 'route-working') }}
+    </div>
+  </form>
+  {# The picker's help renders in BOTH states (the step-1 grammar every Transact
+     screen speaks): the lead sentence answers the state, and the bounded-list
+     note stays as long as the datalist does — the suggestions are no less
+     bounded after a customer is picked. #}
+  <p class="help">
+    {% if not customer_id %}
+      {# Nobody is picked, so nothing has been read about anybody — the route's
+         requirements below are a fact about the ROUTE and load either way. #}
+      Pick the customer whose money is moving. The route can be answered first — what Conduit
+      requires is a fact about the route, not about a customer — but the funding account, the
+      whitelist and the payout form itself are read for whoever is named here, so they wait for
+      this.
+    {% else %}
+      Whose money is moving. Changing it reloads this page against their accounts.
+    {% endif %}
+    {% if customers_more %}The suggestions are the first {{ customers|length }} customers, not
+    the whole list; an id typed in full is accepted whether or not it is suggested.{% endif %}
+  </p>
+  <p class="help">
+    {% if route.valid_purpose %}
+      <strong>{{ enum_label(route.purpose) }}</strong> <code class="raw">{{ route.purpose }}</code> —
+      {{ purpose_help.get(route.purpose, '') }}
+    {% else %}
+      The purpose drives Conduit's documentation and whitelist gating — pick the true one, and the
+      fields it needs appear below.
+    {% endif %}
+  </p>
+  <p class="help">
+    Country: a code or an exact country name — “United States” is sent as <code>USA</code>, and
+    anything that is not an exact name is sent as typed. The requirements response is the only
+    authority on which rails a route has; a rail that is not eligible answers with a
+    problem-detail, shown above.
+  </p>
+  {% for item in accounts if doomed_accounts.get(item.id) %}
+    {% if loop.first %}
+      <p class="help">
+        {{ rail_message.format(rail=route.rail, pinned=doomed_accounts[item.id],
+                               asset=item.asset.code if item.asset else '') }}
+      </p>
+    {% endif %}
+    {# The refusal is a path, one line per account it refuses. Two
+       operations with two settlements, never one: Conduit refuses a chained
+       payout on a fiat-to-fiat conversion, so there is no combined rate and no
+       single confirmation to offer, and the copy may not imply either. #}
+    <p class="help">
+      {% if convert_links.get(item.id) %}
+        <a href="{{ convert_links[item.id] }}">Convert
+        {{ item.asset.code if item.asset else '' }} into {{ doomed_accounts[item.id] }}</a>
+        out of <code class="raw">{{ item.id }}</code>, then come back and fund this payout from
+        the account it lands in. Two operations, each with its own settlement: the conversion
+        settles before its output can be spent, so fund the payout only after it has. The
+        amount does not travel — what the conversion delivers is what there is to send, so it
+        is answered again against the account that received it.
+      {% else %}
+        Converting first cannot serve <code class="raw">{{ item.id }}</code> either: this
+        customer holds no active {{ doomed_accounts[item.id] }} account for a conversion to land
+        in. <a href="/customers/{{ customer_id }}/request-account">Request
+        a {{ doomed_accounts[item.id] }} account</a> — Conduit reviews the request like any
+        other, and both steps can run once it is active.
+      {% endif %}
+    </p>
+  {% endfor %}
+</div>
+
+{# STEP 2 — the destination, before the requirements. The ask:
+   "once the client chooses a customer, list available contacts so they can
+   choose one before re-entering the requirements … new contact or reuse".
+
+   This is the SAME control the "Use saved contact" select was, moved out of the
+   payout form and up here, and unfiltered: it used to sit under the route and
+   could therefore only offer contacts that route could pay, which is backwards
+   once the contact is what answers the route. Choosing one re-renders the page
+   with `?counterparty=…` — the prefill URL, one truth — and the handler
+   fills in the corridor the contact was saved for plus whatever the last payment
+   to it can prove.
+
+   It sends the CUSTOMER and the contact and nothing else, deliberately: a route
+   left over from a previous answer would be carried back and would then win over
+   the contact's own corridor (blanks are what the implication fills). `hx-include`
+   still carries the amount box, so a typed amount is never lost to a pick.
+
+   `hx-sync="#route-row:replace"` puts it on the ROUTE ROW's queue rather than one
+   of its own: both forms swap the whole of `main`, and unscoped they could be in
+   flight together and land in either order, the loser painting a page built from
+   the other's inputs. #}
+{% if not whitelist_gated %}
+  <div class="bar">
+    <form id="contact-first" class="row" method="get"
+          action="{{ '/customers/' ~ customer_id ~ '/payouts/new' if customer_id else '/payouts/new' }}"
+          hx-get="/payouts/new" hx-trigger="change from:#counterparty"
+          hx-target="main" hx-select="main" hx-swap="outerHTML"
+          hx-push-url="true" hx-sync="#route-row:replace" hx-include="#amount">
+      <input type="hidden" name="customer_id" value="{{ customer_id }}">
+      {# Names first, id on the wire — the house datalist, and the same shape the
+         customer control above wears, control inside its label so the tray rule
+         fires ("a micro-label OVER its control"). The label is the FIELD's name;
+         the order this step is answered in is the help's first sentence, because
+         this tray sits below the route tray and nothing about its position says
+         it comes first. The option carries what the contacts page shows: the
+         name, the rail family, and the coordinates by their last four digits. #}
+      <label for="counterparty">Saved contact
+        <input type="text" id="counterparty" name="counterparty" list="saved-contacts"
+               value="{{ chosen_counterparty }}" size="30" placeholder="start typing a name"
+               autocomplete="off" {{ 'disabled' if not saved and not chosen_counterparty }}>
+      </label>
+      <button type="submit" {{ 'disabled' if not saved and not chosen_counterparty }}>Use this contact</button>
+      {{ m.working('Loading…') }}
+      <span class="spacer"></span>
+      {% if customer_id %}<a href="/customers/{{ customer_id }}/contacts">Manage contacts</a>{% endif %}
+    </form>
+    <datalist id="saved-contacts">
+      {% for cp in saved %}<option value="{{ cp.id }}">{{ cp.label }} · {{ cp.rail_family }}{% if mask(cp.recipient) %} · {{ mask(cp.recipient)|join(' ') }}{% endif %}</option>{% endfor %}
+    </datalist>
+    <p class="help">
+      {% if not customer_id %}
+        {# The non-claim: no read was made about anybody, so nothing is said about
+           whether they have contacts. #}
+        Pick the customer above first — an address book belongs to one of them.
+      {% elif saved %}
+        {# First sentence carries the ORDER, because the layout cannot: the one-tray
+           ruling keeps the customer and the route in a single tray above, so this
+           step can only sit below the thing it comes before. #}
+        <strong>Answer this before the route above</strong>, or leave it empty and answer the
+        route yourself — the route-first flow this page has always had. Picking a contact fills
+        in the rail, the recipient type and the destination country it was saved for, and the
+        destination fields below; all of them stay editable, and what is sent is what this form
+        holds when you submit it. The purpose is never filled in from a contact — a contact
+        stores a corridor, never a purpose.
+      {% else %}
+        No contact has been saved for this customer yet, so this is a new destination: answer
+        the route above and fill the fields in. Tick <em>Save as contact</em> when you send the
+        payout and it will be offered here next time.
+      {% endif %}
+    </p>
+  </div>
+{% endif %}
+
+{% if resend %}
+  {# The resend note. It sits ABOVE the payout form on purpose: when
+     the purpose or the rail could not be named, there IS no form yet, and this
+     is the paragraph that says why and points at the row that produces one.
+     Every sentence below states something this console can prove — what it could
+     not read is said, never filled in.
+
+     The whole paragraph is skipped when the answered route and the contact's own
+     corridor disagree (gate finding m3): nothing of the contact is on the form
+     in that case — not its coordinates, not its last payment's amount or
+     currency — so every sentence in here would be describing a prefill that did
+     not happen. The mismatch paragraph at the bottom is the note, alone. #}
+  {% if not resend.mismatch %}
+  <p class="help">
+    {% if resend.read %}
+      {# "was", and "wherever this form was empty": the operator's own answers
+         win over this one — an amount already in the box, or a route already in
+         the URL, is never overwritten — so the sentence states the payment and
+         what was done with it rather than claiming every field below came from
+         it. #}
+      {% if resend.source == 'saved' %}The payout that saved this contact
+      (<strong>{{ resend.label }}</strong>) was{% else %}The last payment this console recorded
+      to <strong>{{ resend.label }}</strong> was{% endif %}
+      {{ resend.asset }} {{ resend.amount }}{% if resend.transaction %}, transaction
+      <a href="/transactions/{{ resend.transaction }}"><code
+        class="raw">{{ resend.transaction }}</code></a>{% endif %}. Its amount, purpose and
+      route are prefilled here wherever this form was empty; every one of them stays editable,
+      nothing is sent until you submit this form, and the amount is checked exactly as a typed
+      one is — ceiling included.
+    {% else %}
+      {# One sentence for both causes, because this page cannot tell them apart:
+         no payment to this contact was ever recorded here, or the read of the
+         one that was did not land. Either way nothing about an amount is known,
+         and the honest thing is to say so rather than to leave the box quietly
+         empty. #}
+      No earlier payment to <strong>{{ resend.label }}</strong> could be read back; amount not
+      prefilled.
+      {% if whitelist_gated %}The corridor this contact was saved for is filled in from the
+      contact itself; the purpose and the amount are not.{% else %}The destination, and the
+      corridor this contact was saved for, are filled in from the contact itself; the purpose
+      and the amount are not.{% endif %}
+    {% endif %}
+    {% if resend.changed and not whitelist_gated %}
+      This contact's coordinates were edited after that payment: what is filled in below is the
+      contact's record <em>as it stands now</em>, not what that payment paid.
+    {% endif %}
+    {% if whitelist_gated %}
+      {# This route pays only a registered recipient, so nothing of the contact's own
+         coordinates is on this form — the address book is not offered under the gate
+         (see the picker section below, which is not rendered here) and this note is
+         about the money alone. #}
+      This route is whitelist-gated: the destination is Conduit's registered record, picked
+      below, and nothing of this contact's own coordinates is filled in.
+    {% endif %}
+    {% if resend.asset and (not account or asset != resend.asset) %}
+      That payment was in {{ resend.asset }}, and no active {{ resend.asset }} account of this
+      customer is on the funding list above — so the funding account is not prefilled from it.
+    {% endif %}
+  </p>
+  {% endif %}
+  {% if resend.rails %}
+    <p class="help">
+      {# The one thing a stored contact cannot say, and a read-back only sometimes
+         can. `destination.recipient.rail` on a withdrawal is the whitelist FAMILY,
+         and four payout rails share `us`; a settlement reference names the real
+         one, but only once the payment has one. So the rail above is the family's
+         FIRST — `contacts.edit_route`'s rule, which the contact edit page has
+         used — and this sentence is what keeps that from being a
+         silent guess. #}
+      This contact is saved for the <code class="raw">{{ resend.family }}</code> rail family,
+      which {{ resend.rails|join(', ') }} all share. Nothing on record says which one carried
+      the payment, so the row above shows the family's first — change it there if this one
+      goes over another; the contact stays picked either way.
+    </p>
+  {% endif %}
+  {% if resend.mismatch %}
+    <p class="help">
+      {# The cost of a contact list that is no longer filtered by route: the two
+         can now disagree. The answered route wins — it is the operator's — and
+         the disagreement is stated rather than quietly paired, which is the same
+         rule every other three-state sentence on this page follows. #}
+      The route above asks for a different {{ resend.mismatch|join(', ') }} than
+      <strong>{{ resend.label }}</strong> was saved for. The route above is what the form below
+      is built from and what would be sent; nothing of this contact was filled in where the two
+      disagree. Clear the route to take the contact's own, or pick another contact.
+    </p>
+  {% endif %}
+{% endif %}
+
+{% if rm and not customer_id %}
+  {# The route answered, but a payout is created under the customer whose account
+     funds it — and its recipient picker, its address book and its batch link are
+     all that customer's. So the form waits for step 1 rather than rendering
+     controls that point at `/customers//…`. #}
+  <p class="muted">Pick the customer at the head of the row above and this route's form appears here.</p>
+{% elif rm and not can_act %}
+  <p class="muted">Read-only: sending a payout needs the <code>payout.create</code> permission.</p>
+{% elif rm %}
+  {# The route is named once, by the route row directly above this. #}
+  {# No step number: the route row above is a row of controls, not a step to
+     complete, so numbering this "3" would count two screens that no longer
+     exist. #}
+  <h2>Payout details</h2>
+
+  {% if model.blocked_jurisdictions %}
+    <p class="muted">
+      Blocked for this route: {% for code in model.blocked_jurisdictions %}<span class="chip">{{ code }}</span>{% endfor %}
+    </p>
+  {% endif %}
+
+  {% if rm.form_errors %}
+    <div class="problem" role="alert">
+      <strong>This payout was not sent</strong>
+      <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  {# The batch flow moved out of this form and onto the Transact fork, because a
+     batch's route has no purpose in it — the purpose is a column of the file.
+     What stays here is the signpost, carrying the corridor this page already
+     knows so the batch screen opens on it. #}
+  <p class="muted">
+    Many payouts at once?
+    <a href="/customers/{{ customer_id }}/batches/new?{{ {
+         'rail': route.rail, 'recipientType': route.recipient_type,
+         'destinationCountry': route.country,
+         'virtualAccountId': account.id if account else ''}|urlencode }}">Send them as a batch</a>
+    — one CSV, one row per payment, and a <code>purpose</code> column, so one file may mix
+    purposes. Nothing is sent by uploading.
+  </p>
+
+  {# `hx-include="#route-row"`: the route this body states is READ OFF the live
+     row, not copied into hidden fields at render time. Five hidden inputs used
+     to sit here, and they were a second copy of five controls the operator can
+     still move — which was fine only while every one of those moves re-rendered
+     the page. The funding account no longer does (it triggers no requirements
+     read, because it changes nothing discovery answers), so a copy would go
+     stale in exactly the place this console cannot afford one: which account the
+     money leaves. One source, no sync to get wrong. Inherited by the quote
+     button below, which needs the same account and country. #}
+  {# `hx-disabled-elt` reaches OUTSIDE this form on purpose, the same as its
+     twin on transfers: the route row and this
+     form are separate sync queues, so a route change or a Prefill *during* a
+     submission fired a competing GET that swapped `main` — fresh nonce,
+     re-enabled button — while the POST was still on the wire, and a second click
+     was a second payout. Freezing every control that can swap `main` means no
+     such request can start: the page holds still while money is moving, which is
+     also what the operator should see.
+
+     Scoped selectors rather than a list of ids: `#route-fields select` covers
+     the fifth route control the day one is added, which a hand-kept list would
+     silently miss. `#customer_id` is included: the
+     customer control sits in the route row but OUTSIDE `#route-fields`, and its
+     own `change` clause swaps `main` like any route change — the freeze covers
+     every trigger, or it covers nothing. The quote button is deliberately
+     absent — it targets `#quote-panel` and cannot swap `main` or re-arm this
+     button. #}
+  <form id="payout-form" hx-post="/customers/{{ customer_id }}/payouts/new"
+        hx-include="#route-row"
+        hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-sync="this:drop"
+        hx-disabled-elt="find button[type=submit], #customer_id, #route-fields select,
+                         #route-fields input, #route-row button, #counterparty,
+                         #contact-first button">
+    {# One-use nonce, minted by this render (OPERATIONS_SPEC §1): a browser that
+       re-sends this exact body after a lost redirect lands back on the same
+       operation instead of paying twice. #}
+    <input type="hidden" name="intent" value="{{ new_intent() }}">
+
+    <section>
+      <h3>Money</h3>
+      <div class="field">
+        <label for="amount">Amount *</label>
+        <input type="text" id="amount" name="amount" inputmode="decimal" class="num"
+               value="{{ amount }}" placeholder="1000.00" required{{ m.err_attrs_named(field_errors, 'amount') }}>
+        {{ m.field_error(field_errors, 'amount') }}
+        {# The currency is the funding account's and is named on the picker
+           above, not repeated here: this label is rendered once and the account
+           can be changed without a re-render, so naming a currency here would be
+           a label that can quietly stop being true. #}
+        <div class="help">
+          In the funding account's own currency, at its own precision. A decimal string, never
+          rounded here.
+        </div>
+      </div>
+      {{ m.internal_reference(reference) }}
+    </section>
+
+    {% if whitelist_gated %}
+      <section>
+        <h3>Recipient</h3>
+        <div class="problem wait" role="alert">
+          <strong>This route requires a whitelisted recipient</strong>
+          {% if model.whitelist.reason %}<div>{{ model.whitelist.reason }}</div>{% endif %}
+          <div class="meta">
+            The destination's bank coordinates come from Conduit's registered record, not from
+            this form.
+          </div>
+        </div>
+        <div class="field">
+          <label for="whitelistRecipientId">Registered recipient *</label>
+          <select id="whitelistRecipientId" name="whitelistRecipientId" required{{ m.err_attrs_named(field_errors, 'whitelistRecipientId') }}>
+            <option value="">—</option>
+            {% for item in recipients %}
+              <option value="{{ item.id }}" {{ 'selected' if item.id == selected_recipient }}>
+                {{ item.legalName }} · {{ item.rail }} ·
+                {# Last four only — the same masking policy as the address book
+                   (`counterparties.identify`). A picker needs to tell two
+                   destinations apart, not to print either one. #}
+                {{ coords(item) }} ({{ item.relationship }})
+              </option>
+            {% endfor %}
+          </select>
+          {{ m.field_error(field_errors, 'whitelistRecipientId') }}
+          {% if whitelist_capped %}
+            {# The picker takes page one. Stated, never implied by a short list —
+               a registration past it is not offered here. #}
+            <div class="err">
+              <strong>More registrations than this picker reads</strong> — Conduit's whitelist for
+              this customer runs past the first page this form takes, so a registration beyond it
+              is not offered here. Nothing above is wrong; it may be short. The
+              <a href="/customers/{{ customer_id }}/contacts">contacts page</a> lists further.
+            </div>
+          {% endif %}
+          {% if not recipients %}
+            <div class="err">
+              {% if whitelist_listed and off_rail %}
+                {# Three states, not two: the customer HAS registered recipients,
+                   just none this rail can pay. Saying "none for this customer"
+                   here is false, and it leaves an operator who registered one
+                   last week unable to tell whether they are adding a rail or
+                   starting from scratch. #}
+                This customer has {{ off_rail }} registered recipient{{ '' if off_rail == 1 else 's' }},
+                but {{ 'it is not' if off_rail == 1 else 'none are' }} payable over
+                <code>{{ route.rail }}</code> — a registration carries the coordinates of one rail.
+                <a href="/customers/{{ customer_id }}/recipients?rail={{ route.rail }}">Register
+                this destination for {{ route.rail }}</a>, or switch the rail above.
+              {% elif whitelist_listed %}
+                No <strong>registered</strong> recipient for this customer.
+                <a href="/customers/{{ customer_id }}/recipients">Register one</a> — Conduit reviews
+                it before it can be paid.
+              {% else %}
+                Conduit's whitelist could not be read — see above. This console cannot say whether
+                this customer has a registered recipient, so it is <em>not</em> saying there is
+                none. Reload before registering one: a registration is compliance-reviewed, and a
+                duplicate is not free.
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
+
+    <div id="root-fields">
+      {% for group in rm.groups %}
+        <section>
+          <h3>{{ group.title }}</h3>
+          {% for rf in group.fields %}{{ m.field(rf) }}{% endfor %}
+        </section>
+      {% endfor %}
+    </div>
+
+    {% if not whitelist_gated %}
+      {# The `counterparty` hidden field moved to the route row so it
+         survives a route change; this section is still kept out of the gated
+         branch on purpose: under a whitelist gate the destination is Conduit's
+         registered record, so "save this destination" would offer to store a
+         copy of something Conduit already stores — and one the operator did not
+         type. #}
+      <section>
+        <h3>Save this destination</h3>
+        <div class="field">
+          <label>
+            <input type="checkbox" name="save_counterparty" value="1" {{ 'checked' if save_checked }}>
+            Save as contact
+          </label>
+          <div class="help">
+            Kept in this console only — the recipient fields above, stored encrypted for this
+            customer and offered on the next <code>{{ route.rail }}</code> payout to
+            <code>{{ route.country }}</code>. Conduit is never told it exists. Saved when Conduit
+            accepts the payout, not when it settles.
+          </div>
+        </div>
+        <div class="field">
+          <label for="counterparty-label">Name it</label>
+          <input type="text" id="counterparty-label" name="counterparty_label" maxlength="128"
+                 value="{{ save_label }}" autocomplete="off" placeholder="the recipient's legal name">
+          <div class="help">
+            Optional — the recipient's legal name is used when this is blank. Reusing a name you
+            have already saved for this customer updates that contact instead of adding a
+            second one.
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    {# Both polarities, one macro: required is the gate it was,
+       optional is the same widget collapsed. A route that does not ask for a
+       document still accepts one, and retyping the payout because the invoice
+       could only be attached to a *different* route is not a thing this form
+       should make an operator do. #}
+    {{ m.attach_documents(model.documentation, rm, document_purpose, request) }}
+
+    <section>
+      {# Its own thing, not a field group: an <h2> so it sits beside "Payout
+         details" rather than among discovery's group titles inside it. #}
+      <h2>Indicative pricing (optional)</h2>
+      <p class="help">
+        <code>POST /v2/quotes</code> prices this corridor; it reserves nothing. Refresh it
+        immediately before sending.
+      </p>
+      {# `hx-select` is inherited, and the form above sets it to `main` so a 422
+         re-render can be lifted out of a whole document. This button answers
+         with a *fragment*, which has no `<main>` — inherited, the selector
+         matched nothing and htmx replaced the panel with emptiness, so the
+         quote silently deleted its own panel. Saying what to select is the fix;
+         the response's root element is exactly it. #}
+      <button type="button" hx-post="/customers/{{ customer_id }}/payouts/quote"
+              hx-target="#quote-panel" hx-select="#quote-panel" hx-swap="outerHTML"
+              hx-sync="this:drop" hx-disabled-elt="this"
+              hx-indicator="#quote-working">Get / refresh quote</button>
+      {{ m.working('Pricing this route…', 'quote-working') }}
+    </section>
+
+    <p class="row">
+      <button type="submit" id="payout-submit" class="primary">Send payout</button>
+      {{ m.working('Sending…') }}
+      <span id="quote-stale-note" class="muted" hidden>Quote expired — refresh it to re-enable.</span>
+    </p>
+  </form>
+
+  {% with problem=None %}{% include "payouts/_quote.html" %}{% endwith %}
+{% endif %}
+{% endblock %}

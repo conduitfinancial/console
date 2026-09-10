@@ -1,0 +1,19 @@
+{
+  "_host": "https://api.sandbox.conduit.financial",
+  "_observed_at": "2026-09-01T18:42:52Z",
+  "_probe": "the same payout-mode option redeemed WITHOUT autoPayout",
+  "response": {
+    "body": {
+      "correlationId": "67ed3d7d-568e-48b5-8526-2cd1902f831b",
+      "detail": "Quote option qop_034HPXnAn4ulAW1LR88V2w was priced for a SEPA payout; redeeming it requires autoPayout naming the recipient.",
+      "docs": "https://conduit-v2.mintlify.app/errors#validation-error",
+      "instance": "/v2/orders",
+      "resolution": "Check the 'errors' array in the response for specific field-level issues and correct your request payload accordingly. For multipart uploads, also inspect the optional 'field' member.",
+      "status": 400,
+      "timestamp": "2026-09-01T18:42:55.843Z",
+      "title": "Validation Error",
+      "type": "VALIDATION_ERROR"
+    },
+    "status": 400
+  }
+}

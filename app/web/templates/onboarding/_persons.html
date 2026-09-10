@@ -1,0 +1,64 @@
+{% import "macros.html" as m %}
+<div id="persons">
+  {% for card in rm.persons %}
+    <div class="card person-card" data-person="{{ card.index }}">
+      {# The card's own row identity: without it a card with every field blank
+         would not appear in the submission at all (forms.parse_submission keys
+         people off their `p.N.` names). #}
+      <input type="hidden" name="p.{{ card.index }}.role" value="{{ card.role }}">
+      <div class="row">
+        <strong>{{ m.role_label(card.role) }}</strong>
+        {% if card.role == 'any' %}
+          <span class="muted">a person this snapshot asks for without naming a role — theirs are
+            answered in Roles below</span>
+        {% endif %}
+        {% if card.ownership_threshold is not none %}
+          <span class="muted">ownership threshold {{ card.ownership_threshold }}%</span>
+        {% endif %}
+        <span class="spacer"></span>
+        {% set row = person_rows | selectattr('role', 'equalto', card.role) | first %}
+        {# `hx-disabled-elt="this"` for the same reason as the autosave span in
+           form.html: the wizard form's `find button[type=submit]` is inherited
+           by every requester inside it, matches nothing from a button, and
+           makes htmx log an error instead of disabling anything. `this` is the
+           button that was clicked — which is the one that should go inert while
+           its own swap is in flight. #}
+        {% if can_edit and row and row.can_remove %}
+          <button type="button" hx-sync="this:drop" hx-disabled-elt="this"
+                  hx-post="/onboarding/{{ draft.id }}/persons/{{ card.index }}/remove"
+                  hx-include="#wizard" hx-target="#persons" hx-swap="outerHTML">Remove</button>
+        {% endif %}
+      </div>
+      {% for rf in card.fields %}{{ m.field(rf) }}{% endfor %}
+      {% if card.documents %}{{ m.documents(card.documents) }}{% endif %}
+      {% if can_edit %}
+        {% call m.uploader(request) %}
+          <input type="file" data-upload data-purpose="{{ person_purpose }}" data-draft="{{ draft.id }}"
+                 data-person="{{ card.index }}" data-target="#doc-chips-{{ card.index }}"
+                 accept=".pdf,.png,.jpg,.jpeg">
+        {% endcall %}
+      {% endif %}
+      <div id="doc-chips-{{ card.index }}">
+        {% for doc_id in card.document_ids %}
+          {% with field='p.' ~ card.index ~ '.documentIds', doc_id=doc_id, filename=doc_id %}
+            {% include "onboarding/_chip.html" %}
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+
+  {% for row in person_rows %}
+    <p class="row">
+      <span class="muted">
+        {{ m.role_label(row.role) }}: {{ row.count }} of {{ row.min_count }}+{% if row.max_count %} (max {{ row.max_count }}){% endif %}
+      </span>
+      {% if can_edit and row.can_add %}
+        <button type="button" hx-sync="this:drop" hx-disabled-elt="this"
+                hx-post="/onboarding/{{ draft.id }}/persons"
+                hx-vals='{"new_role": "{{ row.role }}"}' hx-include="#wizard"
+                hx-target="#persons" hx-swap="outerHTML">Add {{ m.role_label(row.role, 'person') }}</button>
+      {% endif %}
+    </p>
+  {% endfor %}
+</div>

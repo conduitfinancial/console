@@ -1,0 +1,22 @@
+{
+  "clientReferenceId": "zzztest-sweep-r-1c66c5ce43",
+  "createdAt": "2026-08-31T03:26:31.045Z",
+  "failureCode": "rejected_by_ops",
+  "failureMessage": "The Tax ID on the document doesn't match the value you submitted.",
+  "id": "app_034GTiPfY0jDloAbqjP0Va",
+  "persons": [
+    {
+      "name": "ZZZTEST Console E2E firstName ZZZTEST Console E2E lastName",
+      "referenceId": "app_034GTiPfY0jDloAbqjP0Va:qzD"
+    },
+    {
+      "name": "ZZZTEST Console E2E firstName ZZZTEST Console E2E lastName",
+      "referenceId": "app_034GTiPfY0jDloAbqjP0Va:22V"
+    }
+  ],
+  "resubmittable": true,
+  "status": "rejected",
+  "submittedAt": "2026-08-31T03:26:31.044Z",
+  "type": "customer_onboarding",
+  "updatedAt": "2026-08-31T03:26:31.224Z"
+}

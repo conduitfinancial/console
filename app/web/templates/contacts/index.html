@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% import "contacts/_badges.html" as b %}
+{% block title %}Contacts · Conduit Console{% endblock %}
+{% block body %}
+{# **No action pill, deliberately**: a contact is
+   saved by sending a payout for one customer, and whitelisted from that
+   customer's own page — both per-customer verbs, and a pill naming one from a
+   page with no customer in context would promise a page that first has to ask
+   who. Same reason `/accounts` carries none. #}
+{{ m.page_head('customers', 'Contacts') }}
+{# Two sentences, not five (2026-09-02). A list
+   page's lede says what the rows are and where they came from; the whitelist
+   half's architecture is not that — it is a caveat about ONE column, true only
+   while the filter names no single customer, so it moved to the help idiom under
+   the tray that causes it. #}
+<p class="muted lede">
+  Every destination this console has saved, across every customer. Read from this installation's
+  own records — no Conduit call for the rows — so the list is here even when Conduit is not.
+</p>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/contacts" class="bar row"
+      hx-get="/contacts" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <label>Customer
+    {# Name **or** id. A `cus_…` is itself; anything else is resolved
+       through the customers directory's own bounded name walk, so the two pages
+       cannot disagree about what "acme" means. The datalist suggests without
+       constraining — a name it does not list is still typeable and still
+       searched. #}
+    <input type="text" name="customerId" value="{{ customerId }}" list="known-customers"
+           placeholder="name or cus_…">
+  </label>
+  {{ m.customer_datalist(suggestions) }}
+  <label>Contact name
+    <input type="text" name="contactName" value="{{ contactName }}" placeholder="label or legal name">
+  </label>
+  <label>Rail family
+    <select name="family">
+      <option value="">any</option>
+      {% for value in families %}
+        <option value="{{ value }}" {{ 'selected' if value == family }}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Can be used for
+    <select name="capability">
+      <option value="">any</option>
+      {% for value in capabilities %}
+        <option value="{{ value }}" {{ 'selected' if value == capability }}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/contacts">Reset</a>
+</form>
+
+{% if not customerId %}
+  <p class="help">
+    <strong>Whitelist registrations are Conduit's, and Conduit lists them per customer only</strong>
+    — there is no global endpoint, exactly as for virtual accounts — so no row below carries a
+    <em>Registered for intercompany payouts</em> capability. Name one customer above, or open
+    that customer's own <a href="/customers">Contacts page</a>, and both halves are shown.
+  </p>
+{% endif %}
+{% if unknown_customer %}
+  <div class="problem warn" role="status">
+    <strong>No customer matches “{{ customerId }}”</strong>
+    <p>
+      Nothing is listed below because nothing could be: the filter names a customer this console
+      could not find{% if name_capped %}, and the search stopped at the first {{ walk_pages }}
+      customers{% endif %}. Try a shorter name, or paste the <code>cus_…</code> id.
+    </p>
+  </div>
+{% elif matched_customers > 1 %}
+  <p class="muted">
+    {{ matched_customers }} customers match “{{ customerId }}” — the rows below are all of theirs.
+    The whitelist half needs <em>one</em> customer (Conduit lists it per customer), so no row here
+    carries a whitelist capability; name one exactly for that.
+  </p>
+{% elif name_capped %}
+  <p class="muted">
+    That customer search stopped at the first {{ walk_pages }} customers — refine it, or paste the
+    <code>cus_…</code> id.
+  </p>
+{% endif %}
+{% if unreadable_count %}
+  <p class="muted">
+    {{ unreadable_count }} contact{{ 's' if unreadable_count != 1 }} could not be read, so
+    {{ 'they were' if unreadable_count != 1 else 'it was' }} not matched against this name — an
+    unreadable row's legal name is exactly what is unreadable.
+  </p>
+{% endif %}
+{% if unanswerable %}
+  {# Said out loud rather than answered with a shorter list: the console cannot
+     know which contacts are whitelisted until it is told which customer to ask
+     about, and quietly returning the saved-only rows would look like an answer. #}
+  <div class="problem warn" role="status">
+    <strong>That capability needs a customer</strong>
+    <p>
+      Conduit lists whitelist registrations per customer, so <code>{{ capability }}</code> cannot
+      be answered across all of them. The rows below are unfiltered by capability — name a
+      customer above and the filter becomes exact.
+    </p>
+  </div>
+{% endif %}
+
+{% if unresolvable %}
+  <div class="problem warn" role="status">
+    <strong>That capability could not be applied</strong>
+    <p>
+      This customer's whitelist could not be read, so <code>{{ capability }}</code> has no answer
+      right now. The rows below are unfiltered by capability — reload to try the read again.
+    </p>
+  </div>
+{% endif %}
+{% if capped %}
+  <div class="problem warn" role="status">
+    <strong>More registrations than this page reads</strong>
+    <p>
+      This customer's whitelist runs past the pages this view walks, so a saved contact whose
+      registration sits beyond them shows no whitelist capability here.
+    </p>
+  </div>
+{% endif %}
+{{ m.result_meta(request, rows|length, 'contact', per_page=pager.size,
+                 export=export_url(request, 'counterparties')) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Name</th><th>Customer</th><th>Route</th><th>Coordinates</th><th>Can be used for</th><th>Updated</th></tr>
+  {% for row in rows %}
+    <tr>
+      <td>
+        {% if row.saved %}
+          <a href="/customers/{{ row.saved.customer_id }}/contacts">{{ row.label }}</a>
+        {% else %}
+          {{ row.label }}
+        {% endif %}
+        {% if row.legal_name and row.legal_name != row.label %}
+          <div class="muted">{{ row.legal_name }}</div>
+        {% endif %}
+      </td>
+      <td>
+        {% set owner = row.saved.customer_id if row.saved else customerId %}
+        {{ m.customer_cell(names, owner, href='/customers/' ~ owner ~ '/contacts') }}
+      </td>
+      <td>{{ row.family or '—' }}{% if row.saved %} · {{ row.saved.recipient_type }}{% endif %}</td>
+      <td class="num">
+        {% if row.unreadable %}
+          <span class="muted" title="This row's stored coordinates could not be decrypted">unreadable</span>
+        {% else %}
+          {% for coordinate in row.coordinates %}<div>{{ coordinate }}</div>
+          {% else %}<span class="muted">—</span>{% endfor %}
+        {% endif %}
+      </td>
+      <td>{{ b.badges(row, listed) }}</td>
+      <td>{% if row.saved %}{{ row.saved.updated_at|ts }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">
+      {% if filtered %}
+        No contact matches these filters. Widen them, or <a href="/contacts">clear them</a>.
+      {% else %}
+        No contact has been saved yet. A row appears when a payout is sent with
+        <em>Save as contact</em> ticked — <a href="/customers">pick a customer</a> to start one.
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{{ m.table_foot(pager) }}
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Pay a contact · Conduit Console{% endblock %}
+{% block body %}
+{# The quick action's picker. One question — which contact — asked in
+   the step-1 grammar: a names-first datalist whose wire value is the id,
+   a help sentence that states the list's bounds in both states, and a submit that
+   goes to a form rather than to a mutation.
+
+   Nothing on this page pays anybody and nothing on it is read from Conduit: the
+   rows are this console's own contacts and the customer names are what it has
+   already observed, so it renders whole while Conduit is down. Submitting lands
+   on the ordinary payout form for that contact's customer, with the destination
+   prefilled and every guard the form has ever had still in front of the send. #}
+{% call m.page_head('transact', 'Pay a contact') %}
+  <a class="btn" href="/contacts">All contacts</a>
+{% endcall %}
+
+{# The other door, named on this one (2026-09-02). Pay a contact and
+   Send a payout are two ways into one room — the launcher ruling's shape
+   ("complements, not a migration") — and that only works while each door says
+   which question it answers. This one answers "I know who"; the sentence points
+   at the one that answers "I know what". #}
+<p class="muted lede">
+  Pick a saved contact and this opens the ordinary payout form for the customer it belongs to,
+  with the destination — and, where this console can read the last payment it sent there, the
+  amount and the route — already filled in. Nothing is sent from here: you review that form and
+  submit it exactly as you would any other payout. <a href="/payouts">Send a payout</a> is the
+  same form entered from the other end, for a destination this console has not saved.
+</p>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# The control sits INSIDE its label, which is what makes the tray rule fire: a tray
+   field is "a micro-label over its control, not a word in front of it", and `.bar >
+   label` styles the label that owns the box. As a sibling it rendered as exactly the
+   word in front the ruling names. #}
+<form class="bar row" method="get" action="/payouts/contact">
+  <label for="contact">Contact
+    <input type="text" id="contact" name="contact" list="known-contacts"
+           placeholder="start typing a name" {{ 'disabled' if not rows }} autocomplete="off">
+  </label>
+  <button type="submit" {{ 'disabled' if not rows }}>Continue</button>
+</form>
+{# Names first, id on the wire — `m.customer_datalist`'s trick for the same
+   reason: an operator knows the supplier's name and never the row's UUID. The
+   customer is on the option because one name can be saved by several customers
+   and the payout is made out of THEIR account. #}
+<datalist id="known-contacts">
+  {% for row in rows %}<option value="{{ row.id }}">{{ row.label }} · {{ names.get(row.customer_id) or row.customer_id }}</option>{% endfor %}
+</datalist>
+
+<p class="help">
+  {% if rows %}
+    {# The step-1 shape, in this page's own terms: the unpicked lead is
+       "Pick the …" plus the page's own clause, and the bounded-list note is the
+       house sentence with "contacts" in it — one voice across every picker, so
+       an operator learns the bound once. #}
+    Pick the contact you are paying — every one this console has saved, across all customers,
+    {% if more %}the first {{ cap }} of them suggested here. The suggestions are not the whole
+    list; an id typed in full is accepted whether or not it is suggested, and
+    <a href="/contacts">All contacts</a> lists them.{% else %}{{ rows|length }} in all.{% endif %}
+    <strong>Archived contacts are not offered</strong>, and are refused if one is named
+    anyway: archiving retires a contact from every payout picker, and this is one.
+  {% else %}
+    {# The non-claim: no contact has been saved YET, which is a fact about this
+       console's own table — and the reason is the instruction. Archived ones are
+       excluded from this count, so their absence is stated rather than read as
+       "none exist". #}
+    No contact has been saved in this console yet, so there is nothing to pick — and an archived
+    one would not be offered here even if there were. A destination is saved by ticking
+    <em>Save as contact</em> when you <a href="/payouts">send a payout</a>; it is then offered
+    here and on that customer's own payout form.
+  {% endif %}
+</p>
+{% if not can_act %}
+  <p class="muted">
+    Read-only: this picker opens a payout form, and sending the payout on it needs the
+    <code>payout.create</code> permission.
+  </p>
+{% endif %}
+{% endblock %}

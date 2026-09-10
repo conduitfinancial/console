@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ virtual_account_id }} · Conduit Console{% endblock %}
+{% block body %}
+{# The customer's name is the heading an operator recognises; the account's own id is
+   the mono line under it, and the `cus_…` keeps its link in the row below. A name the
+   bounded resolver did not have leaves the eyebrow's noun and the id, exactly as
+   before. #}
+{{ m.page_head('virtual account', customer_name or 'Virtual account', mono=virtual_account_id) }}
+<p class="row">
+  <a href="/customers/{{ customer_id }}">{% if customer_name %}{{ customer_name }}
+    {% else %}Customer{% endif %} <code>{{ customer_id }}</code></a>
+  {% if account %}
+    {{ m.statuspill('virtual_accounts', account.status) }}
+    <span class="muted">{{ account.asset.code if account.asset else '' }}</span>
+    {% if account.activatedAt %}<span class="muted">activated {{ account.activatedAt|ts }}</span>{% endif %}
+  {% endif %}
+</p>
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{% if account %}
+  <h2>Balances</h2>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Asset</th><th class="num">Available</th><th class="num">Pending</th><th class="num">Frozen</th></tr>
+    {% for row in balances %}
+      <tr>
+        <td>{{ row.code }}</td>
+        <td class="num">{{ m.amount(row.available) }}</td>
+        <td class="num">{{ m.amount(row.pending) }}</td>
+        <td class="num">{{ m.amount(row.frozen) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">
+        Conduit reports no balance on this account yet — one appears with the first deposit.
+        See <a href="#how-to-fund">how to fund it</a> below.
+      </td></tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  <h2 id="how-to-fund">How to fund this account</h2>
+  {% for card in cards %}
+    {% set card_index = loop.index0 %}
+    <div class="card">
+      <div class="row">
+        <strong>{{ card.title }}</strong>
+        {% if card.currency %}<span class="pill muted">{{ card.currency }}</span>{% endif %}
+        {% if not card.known %}
+          {# A block type this build has never seen still renders its rows —
+             coordinates a payer needs are not hidden because the console is a
+             version behind. #}
+          <span class="muted">Unknown instruction type: {{ card.type }}</span>
+        {% endif %}
+      </div>
+      <div class="table-scroll">
+      <table>
+        {% for row in card.rows %}
+          {# The card index, not just its type: an account can publish two blocks of
+             the same type, and duplicate ids would point every Copy button at the
+             first one's field. #}
+          {% set slot = 'copy-' ~ card_index ~ '-' ~ loop.index0 %}
+          <tr>
+            <th style="width:14rem">{{ row.label }}</th>
+            <td>
+              {% if row.multiline %}
+                {# `<input>` strips newlines out of its own value, so a postal
+                   address copied from one arrives as a single run-on line. #}
+                <textarea id="{{ slot }}" readonly rows="3" cols="36" class="num"
+                          aria-label="{{ row.label }}">{{ row.value }}</textarea>
+              {% else %}
+                <input type="text" id="{{ slot }}" value="{{ row.value }}" readonly
+                       class="num" size="36" aria-label="{{ row.label }}">
+              {% endif %}
+              <button type="button" data-copy="#{{ slot }}">Copy</button>
+              {% if row.note %}<span class="muted">{{ row.note }}</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+      </div>
+    </div>
+  {% else %}
+    <p class="muted">
+      Conduit has published no deposit instructions for this account
+      {% if account.status != 'active' %}— they normally arrive when it activates{% endif %}.
+    </p>
+  {% endfor %}
+
+  <p class="row">
+    <a class="btn" href="/transactions?type=deposit&amp;customerId={{ customer_id }}">Deposits ledger</a>
+    <a class="btn" href="/transactions?type=withdrawal&amp;customerId={{ customer_id }}">Payouts ledger</a>
+    {% if can_act and account.status == 'active' %}
+      <a class="btn primary"
+         href="/customers/{{ customer_id }}/payouts/new?virtualAccountId={{ virtual_account_id }}">Send a payout</a>
+      <a class="btn"
+         href="/customers/{{ customer_id }}/transfers/new?virtualAccountId={{ virtual_account_id }}">Transfer</a>
+      <a class="btn"
+         href="/customers/{{ customer_id }}/convert?source={{ virtual_account_id }}">Convert</a>
+    {% endif %}
+  </p>
+
+  <h2>Deposits</h2>
+  {% if deposits_problem %}{{ m.problem(deposits_problem) }}{% endif %}
+  <div class="table-scroll">
+  <table>
+    <tr><th>Transaction</th><th>Status</th><th class="num">Amount</th><th>Created</th><th>Completed</th></tr>
+    {% for item in deposits %}
+      <tr>
+        <td><a href="/transactions/{{ item.id }}"><code>{{ item.id }}</code></a></td>
+        <td>{{ m.statuspill('transactions', item.status) }}</td>
+        <td class="num">{{ amount_of(item) }}</td>
+        <td>{{ item.createdAt|ts }}</td>
+        <td>{{ item.completedAt|ts }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">
+        No deposits into this account on the first page of the customer's deposits — send money
+        to the coordinates <a href="#how-to-fund">above</a>, or
+        <a href="/transactions?type=deposit&amp;customerId={{ customer_id }}">search the whole ledger</a>.
+      </td></tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  {% if is_sandbox() and can_simulate %}
+    <h2>Sandbox</h2>
+    <div class="card">
+      <p class="muted">
+        Sandbox host only — <code>/v2/sandbox</code> does not exist on staging or production, and
+        the route refuses to send there.
+      </p>
+      <form hx-post="/customers/{{ customer_id }}/accounts/{{ virtual_account_id }}/simulate-deposit"
+            class="row">
+        <label>Amount <input type="text" name="amount" inputmode="decimal" required
+                             placeholder="1000.00" class="num"></label>
+        {# Stated, not picked: a deposit lands in the account's own currency and
+           the route reads it back from Conduit, so there is nothing to post. #}
+        {% if account.asset and account.asset.code %}
+          <span>Currency <strong>{{ account.asset.code }}</strong></span>
+        {% else %}
+          <span class="muted">This account's currency is unknown, so a deposit cannot be simulated.</span>
+        {% endif %}
+        <label>Rail
+          <select name="rail">
+            <option value="">default</option>
+            {% for rail in rails %}<option value="{{ rail }}">{{ rail }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Outcome
+          <select name="outcome">
+            <option value="">default (completed)</option>
+            {% for outcome in outcomes %}<option value="{{ outcome }}">{{ outcome }}</option>{% endfor %}
+          </select>
+        </label>
+        <button type="submit">Simulate deposit</button>{{ m.working() }}
+      </form>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

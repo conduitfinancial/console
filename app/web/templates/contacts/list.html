@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% import "contacts/_badges.html" as b %}
+{% block title %}Contacts · Conduit Console{% endblock %}
+{% block body %}
+{% call m.page_head('customer', 'Contacts') %}
+  {% if can_register %}
+    <a class="btn primary" href="/customers/{{ customer_id }}/recipients">Whitelist a destination</a>
+  {% endif %}
+{% endcall %}
+{# **Demoted to a disclosure** (spec §4.5/addendum): this
+   lede carried two teaching sentences past the one the page needs — the
+   transfer carve-out and the merged-row rule are both true on every visit,
+   neither is state-dependent, and neither is what this page IS. The kept
+   sentence is the one that says what the two stores are; the rest moves
+   verbatim, word for word, into the disclosure below. #}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>. Everywhere
+  this customer's money can be sent, from both stores at once — the destinations
+  <strong>this console</strong> remembers for the free-form payout routes Conduit gives no store
+  for (goods and services, payroll, treasury, investments), and the destinations
+  <strong>Conduit</strong> has registered, which are the only ones an <code>intercompany</code>
+  payout to an external <strong>bank</strong> account may name.
+</p>
+<details class="teaching">
+  <summary>How the two stores connect</summary>
+  <p class="muted">
+    (A
+    <a href="/customers/{{ customer_id }}/transfers/new">transfer</a> between two Conduit accounts
+    names the destination account directly and needs no registration.) A row carries both
+    capabilities when the coordinates prove the two records are the same destination; where they do
+    not, they stay two rows.
+  </p>
+</details>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{% if capped %}
+  {# The walk's ceiling, stated. A short list rendered as a complete one is the
+     failure this sentence exists to prevent. #}
+  <div class="problem warn" role="status">
+    <strong>More registrations than this page reads</strong>
+    <p>
+      Conduit's whitelist for this customer runs past the {{ whitelist_pages }} pages this view
+      walks, so registrations beyond them are neither listed here nor matched against a saved
+      contact. Nothing below is wrong; it may be short.
+    </p>
+  </div>
+{% endif %}
+
+{# What the registration that redirected here actually did. The status is the one
+   Conduit answered this page's own list with a moment ago, so each branch is a
+   fact rather than an assumption about a review that may already have happened.
+   A `rejected` submit never reaches this page at all — the form re-renders with
+   Conduit's own problem-detail on the fields it names. #}
+{% if just_registered.id %}
+  {% if just_registered.status == 'registered' %}
+    {# A plain card, not a status-toned box: the state of this *destination* is
+       already told by its own badge in the table, and a green banner here would
+       spend money-state colour on a piece of navigation. #}
+    <div class="card" role="status">
+      <strong>Registered — you can pay it now</strong>
+      <p>
+        {# The destination this registration gates is a BANK account, so the flow
+           it unlocks is the payout page's `intercompany` route — not the
+           transfers screen, which moves money between Conduit
+           accounts and needs no registration at all. #}
+        <code>{{ just_registered.id }}</code> passed review, so it is a destination this customer
+        may be paid to. <a href="/customers/{{ customer_id }}/payouts/new?purpose=intercompany&amp;whitelistRecipientId={{
+        just_registered.id }}">Send an intercompany payout to it</a> — pick the rail and the
+        destination country there, and its coordinates come from Conduit's record.
+      </p>
+    </div>
+  {% elif not just_registered.status %}
+    {# On file, but this render cannot see it: the list read failed, or Conduit
+       has not listed it yet. Both are "we do not know its status", and neither
+       is licence to say `pending_review` — the console does not state a status
+       it was not told. #}
+    <div class="problem wait" role="status">
+      <strong>Registered — its status is not on this page yet</strong>
+      <p>
+        <code>{{ just_registered.id }}</code> was created. The list below does not show it, so
+        reload in a moment; a registration cannot be paid until Conduit's review makes it
+        <code>registered</code>.
+      </p>
+    </div>
+  {% elif just_registered.status == 'pending_review' %}
+    <div class="problem wait" role="status">
+      <strong>Registered — Conduit is reviewing it</strong>
+      <p>
+        <code>{{ just_registered.id }}</code> is <code>pending_review</code>: it is on file, it
+        cannot be paid yet, and nothing further is owed from you. When the review passes, the
+        contact gains its <em>Registered for intercompany payouts</em> capability and appears in the payout
+        form's registered-recipient picker on the <code>intercompany</code> route; if it fails, the
+        row below carries Conduit's reason.
+        {% if is_sandbox() %}On sandbox, <em>Simulate approve</em> on its row makes that decision
+        now.{% endif %}
+      </p>
+    </div>
+  {% else %}
+    <div class="problem warn" role="status">
+      <strong>Registered — its status is {{ just_registered.status }}</strong>
+      <p>
+        <code>{{ just_registered.id }}</code> is on file. Only <code>registered</code> destinations
+        can be paid; the row below carries whatever Conduit says about this one.
+      </p>
+    </div>
+  {% endif %}
+{% endif %}
+
+{# `listed` is the whitelist read's own verdict — an unreadable whitelist must
+   not be counted as an empty one, which is the same distinction the empty row
+   below makes. The saved half is local and cannot fail without taking the page
+   with it, so the count is honest about the half that can. #}
+{{ m.result_meta(request, rows|length, 'contact', problem=none if listed else true,
+                 export=export_url(request, 'counterparties', customerId=customer_id)) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Name</th><th>Route</th><th>Coordinates</th><th>Can be used for</th><th>Saved by</th><th></th></tr>
+  {% for row in rows %}
+    {# The anchor an operation panel's Contact row links to.
+       Saved rows only: a registration this console holds no record of has no
+       console id to be named by. #}
+    <tr {{ ('id="contact-' ~ row.saved.id ~ '"')|safe if row.saved }}>
+      <td>
+        {% if can_edit and row.saved %}
+          <form hx-post="/customers/{{ customer_id }}/contacts/{{ row.saved.id }}/rename"
+                hx-sync="this:drop" hx-disabled-elt="find button" class="row">
+            <input type="text" name="label" value="{{ row.label }}" maxlength="128"
+                   aria-label="Name" required>
+            <button type="submit">Rename</button>{{ m.working() }}
+          </form>
+        {% else %}
+          {{ row.label }}
+        {% endif %}
+        {% if row.legal_name and row.legal_name != row.label %}
+          <div class="muted">{{ row.legal_name }}</div>
+        {% endif %}
+        {% if row.saved %}
+          {# In the FIRST cell, like the applications list's quick view and for
+             the same reason: a right-fixed drawer covers the trailing action
+             column exactly when a second row wants previewing.
+
+             `hx-sync="#drawer:replace"` is load-bearing — without it a slow
+             answer for row A can land after a fast one for row B and show one
+             contact's history under another contact's name. The sync master is
+             the shell because that is where htmx records the in-flight xhr, and
+             naming it is what lets `static/app.js` abort the same request on
+             dismissal. #}
+          <button type="button" class="btn quick" data-quick
+                  aria-label="History — {{ row.label }}"
+                  hx-get="/customers/{{ customer_id }}/contacts/{{ row.saved.id }}/history"
+                  hx-target="#drawer-body" hx-swap="innerHTML" hx-indicator="#drawer"
+                  hx-sync="#drawer:replace">History</button>
+          <div class="muted"><code>{{ row.saved.id }}</code></div>
+        {% endif %}
+        {% if row.entry %}<div class="muted"><code>{{ row.entry.id }}</code></div>{% endif %}
+      </td>
+      <td>
+        {{ row.family or '—' }}{% if row.saved %} · {{ row.saved.recipient_type }}{% endif %}
+        {% if row.saved and row.saved.destination_country %}
+          <div class="muted">
+            {{ row.saved.destination_country }}{% if country_name(row.saved.destination_country) %} — {{ country_name(row.saved.destination_country) }}{% endif %}
+          </div>
+        {% endif %}
+        {% if row.entry %}
+          <div class="muted">
+            {{ row.entry.relationship or '—' }}
+            {# Named only where this console can prove it: the operation that
+               registered this entry through the shortcut recorded whose account
+               it was. An entry registered any other way says nothing rather
+               than a guess. #}
+            {% if targets.get(row.entry.id) %}
+              — account of
+              <a href="/customers/{{ targets[row.entry.id] }}"><code>{{ targets[row.entry.id] }}</code></a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </td>
+      {# Last four digits only, from either store. The full coordinate lives on
+         the payout form and nowhere else (DESIGN.md's last-4 row). Bank
+         identifiers stay whole: an ABA and a BIC identify a *bank* and are
+         public routing data. #}
+      <td class="num">
+        {% if row.unreadable %}
+          <span class="muted" title="This row's stored coordinates could not be decrypted">unreadable</span>
+        {% else %}
+          {# `counterparties.identify`'s policy, as a cell: masked account
+             coordinates, else the public bank identifier, else an em dash. The
+             ABA and the BIC identify a *bank* and are public — but they are the
+             fallback, never a second line beside the account, which is the rule
+             DESIGN.md's last-4 row states for this list. #}
+          {% for coordinate in row.coordinates %}<div>{{ coordinate }}</div>
+          {% else %}
+            {% for identifier in row.bank %}<div>{{ identifier }}</div>
+            {% else %}<span class="muted">—</span>{% endfor %}
+          {% endfor %}
+        {% endif %}
+      </td>
+      <td>{{ b.badges(row, listed) }}</td>
+      <td class="muted">
+        {% if row.saved %}{{ row.saved.created_by }}<div>{{ row.saved.updated_at|ts }}</div>
+        {% else %}<span title="Registered with Conduit; this console holds no record of it">—</span>{% endif %}
+      </td>
+      <td>
+        {# The ledger, filtered to what this console sent here.
+           Saved rows only, and a viewer sees it too — it is a read. The link
+           lands on a page that states its own boundary: these are the payouts
+           this console sent and recorded the contact on, not every payment this
+           destination ever received. #}
+        {% if row.saved %}
+          <a class="btn" href="/transactions?type=withdrawal&customerId={{ customer_id }}&contact={{ row.saved.id }}">Payments to this contact</a>
+        {% endif %}
+        {% if can_act %}
+          {# The whole record, in Conduit's own fields. Rename above is the name
+             alone — this is the destination, and it is a page rather than an
+             inline form because the fields are discovery's and have to be
+             fetched. Offered on an unreadable row too: its coordinates cannot be
+             shown, but its page is where deleting it lives. #}
+          {% if row.saved and can_edit %}
+            <a class="btn" href="/customers/{{ customer_id }}/contacts/{{ row.saved.id }}/edit">Edit</a>
+          {% endif %}
+          {# The bridge: a saved-only contact can be put forward for whitelisting,
+             prefilled from its own stored coordinates. Offered only where it
+             would do something — a contact already registered has nothing to
+             gain, and an unreadable one has no coordinates to offer. #}
+          {% if can_register and row.saved and not row.entry and not row.unreadable and not row.ambiguous %}
+            <a class="btn" href="/customers/{{ customer_id }}/recipients?contact={{ row.saved.id }}">Register for intercompany payouts</a>
+          {% endif %}
+          {% if can_revoke and row.entry and row.entry.status not in ('revoked', 'rejected') %}
+            <form hx-post="/customers/{{ customer_id }}/recipients/{{ row.entry.id }}/revoke"
+                  hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+              <input type="hidden" name="intent" value="{{ new_intent() }}">
+              <button type="submit" class="danger">Revoke</button>{{ m.working() }}
+            </form>
+          {% endif %}
+          {% if is_sandbox() and can_simulate and row.entry and row.entry.status == 'pending_review' %}
+            {% for outcome in ['approve', 'reject'] %}
+              <form hx-post="/customers/{{ customer_id }}/recipients/{{ row.entry.id }}/simulate"
+                    hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+                <input type="hidden" name="outcome" value="{{ outcome }}">
+                <button type="submit">Simulate {{ outcome }}</button>{{ m.working() }}
+              </form>
+            {% endfor %}
+          {% endif %}
+          {% if row.saved and can_archive %}
+            <form hx-post="/customers/{{ customer_id }}/contacts/{{ row.saved.id }}/archive"
+                  hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+              {# The per-row half of the consequence paragraph below: on a row
+                 that also carries a Conduit registration, archiving retires the
+                 saved capability and the row stays. Said on the button because
+                 that is where the operator is when they decide. #}
+              <button type="submit" class="danger"
+                      title="{% if row.entry %}Retires the saved-for-payouts half. This row stays: its Conduit registration is not touched.{% else %}Removes this contact from the payout pickers and from this list. The record stays behind the payouts that named it.{% endif %}">Archive</button>{{ m.working() }}
+            </form>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts, and only one
+       of them means it is safe to register a duplicate. #}
+    <tr><td colspan="6" class="muted">
+      {% if listed %}
+        No contacts for this customer yet. Tick <em>Save as contact</em> when you
+        <a href="/customers/{{ customer_id }}/payouts/new">send a payout</a> and the destination
+        lands here, or
+        <a href="/customers/{{ customer_id }}/recipients">register a destination</a> for
+        intercompany payouts — Conduit reviews every registration before it can be paid.
+      {% else %}
+        Conduit's whitelist could not be read — see above. This customer has no saved contacts
+        either, but the registered half of this list is missing, so reload before registering
+        anything: a duplicate registration is not free.
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{% if can_act and rows %}
+  {# The branch matters and used to be missing: "removes a contact from this
+     list" is false for a row that also carries a registration, which stays
+     listed under its Conduit half. #}
+  <p class="muted">
+    Archiving retires the <em>saved for payouts</em> capability: the contact leaves every payout
+    picker, and it leaves this list <strong>unless it is also whitelisted</strong> — in which case
+    the row stays, carrying its Conduit registration alone. It is not a delete: the record stays
+    behind the payouts that named it, and there is no way back — save the destination again from a
+    payout form if you need it. Revoking is Conduit's side: the destination can no longer be named
+    on a payout, and getting it back means registering it again, which Conduit reviews from the
+    start. Neither one does the other's job — a revoked contact is still saved for payouts, and an
+    archived one may still be whitelisted.
+  </p>
+{% elif not can_act %}
+  {# One permission per capability, because the action column carries five of
+     them and a role holds them one at a time. No "read-only" claim here: the
+     header's own action is `whitelist.register`, which is outside `can_act`, so
+     a sign-in that reaches this sentence may still be able to register one. #}
+  <p class="muted">
+    Editing or renaming a contact needs the <code>contact.edit</code> permission, archiving one
+    needs <code>contact.archive</code>, registering a destination needs
+    <code>whitelist.register</code>, revoking a registration needs <code>whitelist.revoke</code>,
+    and purging a contact's stored coordinates needs <code>contact.delete</code>. History is a
+    read and is open to you.
+  </p>
+{% endif %}
+
+{# The history drawer's shell — rendered once, empty, filled by whichever row's
+   History button was pressed (`contacts/_history.html`). Non-modal by the same
+   argument the applications quick view records: a look at one row while the list
+   stays readable behind it, `role="complementary"` rather than a dialog, focus
+   moved in on open and back to the opening button on dismissal
+   (`static/app.js`). The indicator lives in the shell so it survives the swap
+   that replaces the body. #}
+<aside id="drawer" role="complementary" aria-label="Contact history" tabindex="-1">
+  <div class="drawer-chrome">
+    <span class="micro-label">History</span>
+    {{ m.working('Loading…') }}
+    <button type="button" class="btn" data-drawer-close>Close</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+{% endblock %}

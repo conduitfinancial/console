@@ -1,0 +1,18 @@
+{
+  "correlationId": "9deab13b-67a6-46da-91e8-a110479fa0ae",
+  "detail": "Validation failed",
+  "docs": "https://conduit-v2.mintlify.app/errors#onboarding-not-ready",
+  "errors": [
+    {
+      "category": "individual",
+      "detail": "At least 1 any(s) required, got 0",
+      "pointer": "/individual:any"
+    }
+  ],
+  "instance": "/v2/onboarding",
+  "resolution": "Use the onboarding requirements endpoint to check which fields and documents are required and which values each field accepts, then submit valid values before retrying.",
+  "status": 422,
+  "timestamp": "2026-08-31T03:26:27.498Z",
+  "title": "Onboarding Not Ready",
+  "type": "ONBOARDING_NOT_READY"
+}

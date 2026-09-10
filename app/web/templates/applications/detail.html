@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ application_id }} · Conduit Console{% endblock %}
+{% block body %}
+{# No name in the head, honestly: an application DTO carries `customerId` and no
+   name, and the customer row inside the status card below is where that id
+   lives. Resolving it would cost this page a second Conduit read on every one
+   of its 15-second status refreshes, for a name the customer link already
+   reaches (DESIGN.md's honest-miss clause). #}
+{{ m.page_head('application', 'Application', mono=application_id) }}
+
+{% include "applications/_status.html" %}
+
+{# What was actually submitted. The application DTO answers "what happened to
+   it"; this answers "what did we send" — the question an operator reading a
+   rejection or an RFI is actually asking, and one the console could previously
+   only answer by re-opening the draft (which a settled application no longer
+   has). Collapsed by default: it is long, and it is identity data, so it is
+   opened deliberately rather than displayed to whoever walks past a screen. #}
+{% if submitted %}
+  <details class="card">
+    <summary><strong>Submitted details</strong>
+      <span class="muted">the body sent to Conduit</span></summary>
+    {{ m.submitted_body(submitted) }}
+  </details>
+{% elif submitted_purged %}
+  <p class="muted">The submitted body is past its retention window
+    (<code>OP_BODY_RETENTION</code>) and is no longer stored.</p>
+{% endif %}
+
+{% if application and application.persons %}
+  <h2>People &amp; identity verification</h2>
+  <div class="table-scroll">
+  <table>
+    {% for person in application.persons %}
+      <tr>
+        <td>{{ person.name }}</td>
+        <td><code>{{ person.referenceId }}</code></td>
+        <td>
+          {% if can_idv %}
+            <button type="button"
+                    hx-post="/applications/{{ application_id }}/persons/{{ person.referenceId }}/idv-link"
+                    hx-target="#idv-{{ loop.index0 }}" hx-swap="innerHTML"
+                    hx-indicator="#idv-wait-{{ loop.index0 }}">Get verification link</button>
+            {{ m.working('Asking Conduit…', 'idv-wait-' ~ loop.index0) }}
+          {% endif %}
+          <div id="idv-{{ loop.index0 }}"></div>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endif %}
+
+<h2>Requests for information</h2>
+{% with subject_type = 'application', subject_id = application_id %}
+  {% include "rfis/_panel.html" %}
+{% endwith %}
+{% if not rfis %}
+  {% if rfis_ok %}
+    <p class="muted">
+      No requests for information — Conduit has not asked for anything more.
+      <a href="/applications">Back to the list</a>.
+    </p>
+  {% else %}
+    {# The read did not land. Saying "nothing was asked" here would be the
+       console stating an absence it never established. #}
+    <p class="problem warn" role="alert">
+      The requests for information could not be read just now — this is not the same as
+      there being none. Refresh in a moment, or see <a href="/rfis">the RFI list</a>.
+    </p>
+  {% endif %}
+{% endif %}
+
+{% if is_sandbox() and can_simulate %}
+  <h2>Sandbox</h2>
+  <div class="card">
+    <p class="muted">
+      Sandbox host only — <code>/v2/sandbox</code> does not exist on staging or production, and the
+      route refuses to send there.
+    </p>
+    {# What a simulation actually is, said before the buttons rather than left to
+       the word "simulate" (QA F-003). Both sentences are this console's own
+       machinery, not a guess about Conduit's: the decision is Conduit's real one
+       on this application, and the status card above stops polling when it
+       lands because that fragment carries `every 15s` only while non-terminal. #}
+    <p class="help">
+      A simulated decision is Conduit's real decision on this application: it settles the
+      status, and the card at the top of this page picks the new one up on its next refresh.
+      Nothing here is reversible from the console.
+    </p>
+    {% if terminal %}
+      {# State-aware, and stated rather than hidden (DESIGN.md): the buttons stay
+         on screen so the panel still explains itself, and say why they are inert.
+         The 409 is verified, not assumed — app/web/sandbox_actions.py records the
+         live probe (2026-08-28) behind this sentence. #}
+      <div class="problem warn" role="alert">
+        <strong>Already decided — {{ application.status }}</strong>
+        <div>
+          Conduit answers <code>409 APPLICATION_ALREADY_DECIDED</code> to a second decision on a
+          settled application, so both controls are disabled here rather than sent and refused.
+        </div>
+      </div>
+    {% endif %}
+    {% set why = 'This application is already ' ~ application.status ~ ' — Conduit will not decide it twice.' if terminal else '' %}
+    <form hx-post="/applications/{{ application_id }}/simulate" class="row">
+      <input type="hidden" name="outcome" value="approved">
+      <button type="submit" {% if terminal %}disabled title="{{ why }}"{% endif %}>Simulate approval</button>{{ m.working() }}
+    </form>
+    <form hx-post="/applications/{{ application_id }}/simulate" class="row">
+      <input type="hidden" name="outcome" value="rejected">
+      <label>Category
+        <select name="category" {% if terminal %}disabled{% endif %}>
+          <option value="">none</option>
+          {% for value in ('document_mismatch', 'data_sourcing_mismatch', 'compliance', 'generic') %}
+            <option value="{{ value }}">{{ enum_option(value) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Field <input type="text" name="field" placeholder="e.g. tax_id"
+                          {% if terminal %}disabled{% endif %}></label>
+      <label>Reason <input type="text" name="reason" maxlength="500"
+                           placeholder="free text (with the generic category)"
+                           {% if terminal %}disabled{% endif %}></label>
+      {# The house pattern for a destructive-shaped action:
+         the danger outline plus the sentence that says what it does — not a JS
+         `confirm()`, which this console does not use anywhere and which says
+         nothing an operator can read before deciding. #}
+      <button type="submit" class="danger" {% if terminal %}disabled title="{{ why }}"{% endif %}>Simulate rejection</button>{{ m.working() }}
+    </form>
+    <p class="muted">
+      Rejecting settles this application against the customer: the status becomes
+      <code>rejected</code>, and whether a corrected one may be sent is Conduit's answer, not
+      this console's. A field needs a category; a category only applies to a rejection.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}

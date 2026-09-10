@@ -1,0 +1,127 @@
+{% import "macros.html" as m %}
+{# One contact's trail — the quick-view drawer's body (`contacts/list.html`
+   renders the shell once, `app/web/contacts.py::contact_history` fills it).
+
+   Everything here is `audit_events` read back: this console has no history
+   table, because every write it makes to a contact is already an audited one.
+   What the panel may therefore say is exactly what was recorded at the time —
+   masked identity diffs, names, actors, timestamps — and nothing more. #}
+{% if not contact %}
+  <div class="problem" role="alert">
+    <strong>No such contact for this customer</strong>
+    <p>The id in the link is not this customer's. Nothing has been changed.</p>
+  </div>
+{% else %}
+  <div class="drawer-top">
+    <h3>{{ contact.label }}</h3>
+    <p class="num">{{ coords(contact.recipient) if contact.recipient else '—' }}</p>
+    {% if contact.deleted %}
+      {# The shell of a deleted contact. It is here on purpose: the payments that
+         named it still resolve to this name, and a row that vanished would leave
+         the ledger unable to say where money went. #}
+      <p class="muted">deleted — coordinates purged</p>
+    {% elif contact.recipient is none %}
+      <p class="muted">unreadable — this row's ciphertext no longer decrypts</p>
+    {% elif contact.archived %}
+      <p class="muted">archived — retired from the payout pickers</p>
+    {% endif %}
+  </div>
+
+  <div class="table-scroll">
+  <table>
+    <tr><th>What</th><th>Who</th><th>When</th></tr>
+    {% for row in rows %}
+      <tr>
+        <td>
+          {# An action this build has never heard of is rendered RAW rather than
+             dropped — the unknown-status rule applied to a trail. Its detail is
+             deliberately not dumped: a future action's payload is not something
+             this template can promise is safe to print. #}
+          {% if labels.get(row.action) %}
+            {{ labels[row.action] }}
+          {% else %}
+            <code>{{ row.action }}</code>
+            <div class="muted">This build has no description for that action.</div>
+          {% endif %}
+          {% if row.detail.renamed_from %}
+            <div class="muted">from “{{ row.detail.renamed_from }}” to “{{ row.detail.label }}”</div>
+          {% elif row.action == 'counterparty.rename' and row.detail.label %}
+            <div class="muted">to “{{ row.detail.label }}”</div>
+          {% endif %}
+          {% if row.detail.identity %}
+            {# Masked before→after, exactly as the audit row stored it: account
+               numbers and IBANs by their last four, bank identifiers and the
+               legal name plainly — this console's one masking policy
+               (`counterparties.diff`). #}
+            <ul>
+              {% for key, change in row.detail.identity.items() %}
+                <li><code>{{ key }}</code> <span class="num">{{ change }}</span></li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if row.detail.fields %}
+            <div class="muted">
+              also changed:
+              {% for key in row.detail.fields %}<code>{{ key }}</code>{{ ', ' if not loop.last }}{% endfor %}
+            </div>
+          {% endif %}
+          {% if row.detail.cloned_from %}
+            {# The first row of a clone's trail, and the one fact its own record
+               cannot otherwise carry. The link resolves for an archived or
+               deleted source too — history is exactly what does not go away. #}
+            {# No leading "from": the action label above this line already is
+               "Cloned from another contact", and the pair read "…from another
+               contact / from “X”". This line names WHICH. #}
+            <div class="muted">
+              “{{ row.detail.source_label }}”
+              <a href="/customers/{{ customer_id }}/contacts/{{ row.detail.cloned_from }}/edit"><code>{{ row.detail.cloned_from }}</code></a>
+            </div>
+          {% endif %}
+          {% if row.detail.dropped_whitelist %}
+            <div class="muted">
+              dropped the match with registration <code>{{ row.detail.dropped_whitelist }}</code>
+            </div>
+          {% endif %}
+          {% if row.transaction %}
+            <div><a href="/transactions/{{ row.transaction }}"><code>{{ row.transaction }}</code></a></div>
+          {% elif row.operation %}
+            {# The mutation this console recorded, where Conduit created nothing
+               to link to (a refused payout, a registration still in flight). #}
+            <div><a href="/operations/{{ row.operation }}">the {{ row.operation_type or 'operation' }} it belongs to</a></div>
+          {% endif %}
+        </td>
+        <td class="muted">{{ row.actor }}</td>
+        <td>{{ row.at|ts }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">
+        Nothing is recorded against this contact yet. A contact saved before this console
+        recorded ids on its saves, or renamed since it was saved, can have a trail this panel
+        cannot claim — see the note below.
+      </td></tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  {% if capped_trail %}
+    {# The other boundary: the panel shows a fixed number of entries, and it
+       used to stop at it silently — a trail that quietly ends reads as a trail
+       that ended. The way to the whole record is named. #}
+    <p class="muted">
+      The most recent {{ history_limit }} entries — this contact's trail runs past them. The
+      whole record is in this console's audit log.
+    </p>
+  {% endif %}
+
+  {# The boundary, stated where the operator reads the panel — the same rule the
+     ledger's contact filter follows. #}
+  <p class="muted">
+    This is what <strong>this console</strong> recorded about this contact. Two things are
+    deliberately not here. A <em>save</em> is recorded against the payout that made it and
+    carries the contact's <strong>name</strong>, not its id, so a save made under a name this
+    contact has since been renamed away from cannot be proven to be its own and is not shown.
+    And Conduit's side of a registration — the review, a revocation — belongs to the
+    registration, not to this record: only the moment this console put the contact forward
+    appears above.
+  </p>
+{% endif %}

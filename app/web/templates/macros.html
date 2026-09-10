@@ -1,0 +1,604 @@
+{# Shared render macros. The field macro is the only place a widget name from
+   FORM_ENGINE_SPEC §3 becomes HTML. #}
+
+{% macro statuspill(kind, value) %}{% set p = pill(kind, value) %}<span class="pill {{ p.tone }}">{{ p.label }}</span>{% endmacro %}
+
+{# An application's pill, which needs the whole row rather than the status
+   string: `rejected` splits into "resubmittable" (warn — there is something to
+   do) and "final" (the exception family), and into neither when Conduit sent no
+   `resubmittable` boolean. Same markup, same classes, same `pill()` underneath —
+   see `application_pill`. #}
+{% macro app_statuspill(item) %}{% set p = application_pill(item) %}<span class="pill {{ p.tone }}">{{ p.label }}</span>{% endmacro %}
+
+{# The page head (DESIGN_DIRECTION "Page head"): an accent eyebrow naming the
+   area, the 46px H1, and the page's existing honest description as one muted
+   sentence. The eyebrow is in Conduit's own treatment for it —
+   JetBrains Mono, uppercase, untracked — so the source text here stays
+   lowercase and the stylesheet does the casing. The header-action slot every page already has is the
+   macro's `caller()` — `{% call m.page_head(…) %}<a class="btn primary" …>{%
+   endcall %}` — so the action stays whatever the page writes, gated however the
+   page gates it, rather than becoming a parameter this macro would have to
+   understand.
+   `<h1>` carries no class: the stylesheet already owns h1, and the tests that
+   pin a page's identity match the bare tag. #}
+{% macro page_head(eyebrow, title, sentence='', mono='') %}
+<div class="page-head">
+  <div>
+    {% if eyebrow %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}
+    <h1>{{ title }}</h1>
+    {# `mono`: the resource id, where the title is the human name of the thing.
+       Demoted under the h1 rather than inside it — an operator reads the name
+       and copies the id, and the mono face is this console's mark for the
+       second kind of value (DESIGN.md Typography). #}
+    {% if mono %}<p class="head-id num">{{ mono }}</p>{% endif %}
+    {% if sentence %}<p class="muted lede">{{ sentence }}</p>{% endif %}
+  </div>
+  {% if caller %}<div class="action">{{ caller() }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{# The in-flight word. htmx puts `htmx-request` on whatever issued the request,
+   so dropping this inside that form (or naming it with `hx-indicator`) is the
+   whole mechanism — see static/styles.css. #}
+{% macro working(label='Working…', id='') %}<span class="htmx-indicator"{% if id %} id="{{ id }}"{% endif %}>{{ label }}</span>{% endmacro %}
+
+{# The one line between the filters and the table: what this page is showing, and
+   the way to ask again. `count` is this page's rows; `total` is passed ONLY by
+   the two lists whose endpoint actually reports one (`meta.total`), because
+   "of M" is a claim about the whole result set and this console does not
+   fabricate one for the cursor-paged endpoints that never send it. `newest` is
+   only passed where the request actually sorts that way. `request` is an
+   argument because macros.html is imported without context and `request` is not
+   one of the environment globals.
+
+   Shape per DESIGN_DIRECTION "Result meta": the count at 13px/800 uppercase
+   (the uppercase is CSS, so the sentence in the markup stays a sentence), the
+   qualifiers muted beside it, Refresh pinned right. #}
+{% macro result_meta(request, count, noun, newest=false, problem=none, total=none, per_page=none, export='', note='', export_label='Export CSV') %}
+<p class="row result-meta">
+  {% if problem %}
+    {# The handlers substitute an empty `Page` when the read fails, so `count`
+       is 0 for "Conduit answered with none" *and* for "Conduit did not answer".
+       Those are different facts and this line must not merge them — the same
+       distinction recipients/list.html makes in its empty row. The banner above
+       carries the detail; this says only that the number is absent. #}
+    <span class="count">Couldn't read this list</span>
+  {% else %}
+    <span class="count">Showing {{ count }}{% if total is not none %} of {{ total }}{% endif %} {{ noun if count == 1 else noun ~ 's' }}</span>
+    {# `note` qualifies the order, for a view whose "newest" is not Conduit's
+       (the ledger's contact filter orders by this console's own trail). #}
+    {% if newest %}<span class="breakdown">newest first{% if note %} — {{ note }}{% endif %}</span>{% endif %}
+    {% if per_page %}<span class="breakdown">{{ per_page }} per page</span>{% endif %}
+  {% endif %}
+  <span class="spacer"></span>
+  {# A plain GET link, no JS: the export is this view's filters and the whole
+     result set behind them, not the page on screen. It works on an empty view
+     too — a header-only file is an honest answer to "what is in this view".
+     The cap is stated up front here and again inside any file that hits it
+     (app/web/exports.py). #}
+  {# Gated on the permission, not just on the caller passing a URL: `export.csv`
+     is its own permission precisely because a download is not a page, so a role
+     that reads lists without it must not be shown a button that answers 403.
+     Asked here rather than at the eight call sites — one macro, one rule. #}
+  {% if export and request.state.actor is defined and request.state.actor
+        and 'export.csv' in request.state.actor.permissions %}
+    <a class="btn" href="{{ export }}"
+       title="Every row this view's filters match, up to 10,000 — the file says so if it stops there.">{{ export_label }}</a>
+  {% endif %}
+  {# The current URL, filters and cursor included: "refresh" means *this* view. #}
+  <a href="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">Refresh</a>
+</p>
+{% endmacro %}
+
+{# The table's own footer: where you go next, and how much you see at a time. Both were
+   there before and neither was findable — Previous/Next were two bare links loose under
+   the table, which is how a reader misses them entirely. They are pills in a banded
+   footer now, and the rows-per-page control lives beside them rather than in the filter
+   tray, because it is a property of the *view*, not a filter on the query. Every URL is
+   `pager()`'s, built server-side with the filters carried across — nothing here
+   concatenates a cursor. A missing Previous/Next is still absent rather than disabled:
+   there is no page there to go to. #}
+{% macro table_foot(pager) %}
+<div class="table-foot">
+  <div class="pages">
+    {% if pager.prev %}<a class="btn" href="{{ pager.prev }}">Previous</a>{% endif %}
+    {% if pager.next %}<a class="btn" href="{{ pager.next }}">Next</a>{% endif %}
+    {% if not pager.prev and not pager.next %}
+      <span class="muted">One page — this is all of it.</span>
+    {% endif %}
+  </div>
+  {% if pager.sizes %}
+    <div class="sizes">
+      <span class="micro-label">Rows</span>
+      {% for size in pager.sizes %}
+        <a class="btn {{ 'selected' if size.on }}" href="{{ size.url }}">{{ size.n }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# One customer, named. The human name is what an operator recognises, so it is
+   the prominent half and the link; the `cus_…` stays underneath in the mono face
+   because it is still the copyable, linkable identity (DESIGN.md's
+   names-over-ids row).
+
+   `names` is the resolver's map (`app/web/__init__.py`). A miss — an id beyond
+   the bounded read, a customer whose identity record has resolved no name, a
+   page with no map at all — renders the id alone: never a placeholder, never a
+   guess. `name` lets a caller pass a name the payload itself carried
+   (`customerName` on every transaction DTO), which beats the map because it is
+   the row's own answer rather than a lookup. #}
+{% macro customer_cell(names, customer_id, href='', name='') %}
+{%- if not customer_id %}<span class="muted">—</span>
+{%- else %}
+  {%- set shown = name or names.get(customer_id) %}
+  {%- if shown %}
+    {% if href %}<a href="{{ href }}">{{ shown }}</a>{% else %}{{ shown }}{% endif %}
+    <div class="muted"><code>{{ customer_id }}</code></div>
+  {%- else %}
+    {% if href %}<a href="{{ href }}"><code>{{ customer_id }}</code></a>{% else %}<code>{{ customer_id }}</code>{% endif %}
+  {%- endif %}
+{%- endif %}
+{% endmacro %}
+
+{# A *settled* step on a linear form: the number, the step's name, the value that
+   was chosen, and the way back to choosing it. The chip is a <span> wearing
+   `.btn.selected` — the accent fill already means "this is the one selected"
+   everywhere else on the console (DESIGN.md), and the only thing on the line
+   that navigates is the Change link. `change_url` is a real URL, not JS state:
+   these flows are one page with a widening query string, so dropping a
+   parameter *is* going back a step. #}
+{# `raw` is the wire value behind a chip that speaks operator language (QA
+   F-002): the label is what the operator reads, the raw value is what Conduit's
+   errors, this page's URL and the API all say, so it stays on the line in the
+   mono face rather than being translated away. Omitted where the chip already
+   *is* the wire value. #}
+{% macro step_summary(number, name, chip, description, change_url, raw='') %}
+<div class="card step-summary">
+  <p class="row">
+    <span class="step-n">{{ number }}</span>
+    <strong>{{ name }}</strong>
+    <span class="btn selected">{{ chip }}</span>
+    {% if raw %}<code class="raw">{{ raw }}</code>{% endif %}
+    {% if description %}<span class="muted">{{ description }}</span>{% endif %}
+    <span class="spacer"></span>
+    <a href="{{ change_url }}">Change</a>
+  </p>
+</div>
+{% endmacro %}
+
+{# The operator's own note on an operation. Console-local and
+   optional: it is stored on `operations.reference` (or, for a wizard, on the
+   draft) and is never sent to Conduit — Conduit's `clientReferenceId` is the
+   ledger's own `op.id` and is not this. One macro so the four capture points
+   cannot drift apart in name, bound or wording. #}
+{% macro internal_reference(value='', id='internal-reference') %}
+<div class="field">
+  <label for="{{ id }}">Internal reference</label>
+  <div class="help">Your note for this operation — shows wherever this console displays it. Optional.</div>
+  {# `hx-preserve`: the live node, and therefore whatever the operator has
+     typed, is carried across every `<main>` swap on these pages rather than
+     replaced by the value the *request* happened to carry. Without it a note
+     typed while a quote (or a 422 re-render) was in flight was silently thrown
+     away — and on convert, `hx-include` would then submit the request-time
+     value. htmx 2.0.4 keys this on a stable `id`, which is why the id is a
+     macro parameter and is never omitted. #}
+  <input type="text" id="{{ id }}" name="internal_reference" maxlength="128"
+         hx-preserve="true" value="{{ value or '' }}" autocomplete="off">
+</div>
+{% endmacro %}
+
+{# One money cell. A bucket Conduit stated is printed exactly as it was sent (a
+   decimal string — never parsed, this is money); a bucket it did not state is
+   an em-dash, not a zero. Same rule, same markup, at all three balance tables:
+   "we were told nothing" is not "the balance is zero", and on the frozen bucket
+   a made-up zero is the reassuring lie. #}
+{% macro amount(value) %}{% if value is none %}<span class="muted" title="Conduit stated no amount for this bucket">—</span>{% else %}{{ value }}{% endif %}{% endmacro %}
+
+{# What the operator typed that this render cannot give back. Shown only when
+   the submit form is absent — a discovery read failed, so the page has fallen
+   back to the route picker and there is nowhere to put a note or an amount.
+   It is *said* rather than carried: the picker's next step is a GET form, and
+   putting the note in it would put a free-text operator note into a URL, a
+   query log and a browser history. Truncated for display only; the whole value
+   was never stored anywhere, which is exactly what the sentence admits. #}
+{% macro lost_inputs(reference, amount='') %}
+  {% if reference or amount %}
+    <p class="muted">
+      {% if reference %}
+        Your note was not saved with this attempt: “{{ reference|truncate(80, True, '…', 0) }}” —
+        it will need re-entering when the form reloads.
+      {% endif %}
+      {% if amount %}
+        The amount ({{ amount|truncate(40, True, '…', 0) }}) will need re-entering too.
+      {% endif %}
+    </p>
+  {% endif %}
+{% endmacro %}
+
+{% macro problem(p) %}
+<div class="problem" role="alert">
+  <strong>{{ p.title }}</strong>
+  {% if p.detail %}<div>{{ p.detail }}</div>{% endif %}
+  {% if p.resolution %}<div><em>{{ p.resolution }}</em></div>{% endif %}
+  <div class="meta">
+    {% if p.correlation_id %}Correlation ID: <code>{{ p.correlation_id }}</code>
+    {% else %}Determined from Conduit's records — no correlation id.{% if p.resource_id %} Resource: <code>{{ p.resource_id }}</code>{% endif %}
+    {% endif %}
+    {% if p.status %} · HTTP {{ p.status }}{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# `individualRequirements[].role` is a requirement *selector*, not always a role:
+   the catch-all row ships the sentinel `"any"`, which Conduit's own submit
+   validator then refuses as a value in `ownership.persons[].roles[]`
+   (conduit-issues/06 item 1, verified live). It was reaching the operator as a
+   person card headed `any` (QA F-001) — a schema token where a heading should
+   be. Display only: the card's hidden `p.N.role` input still carries the
+   sentinel verbatim, because forms.py keys the card's requirement row off it.
+   `word` is what the sentinel becomes in a given sentence ("Add person" reads
+   better than "Add Any role"); every real role stays verbatim, as every other
+   wire vocabulary on this console does. #}
+{% macro role_label(role, word='Any role') %}{{ word if role == 'any' else role }}{% endmacro %}
+
+{# A rejected application's reason, in the two voices `resubmittable` splits it
+   into. Warn-tinted when a corrected application will be
+   considered, the exception family when the decision is final, and the neutral
+   box when Conduit sent no boolean at all — which of the two it is has not been
+   established, and this console does not guess at money facts.
+
+   One macro because two surfaces render it — the detail page's `_status`
+   fragment and the list's quick-view drawer — and the copy in here is the
+   load-bearing half: "final" and "resubmittable" are different instructions to
+   an operator, and a second copy of these three sentences is a second place for
+   them to drift. The **action** is not in here: `{% call %}`'s `caller()` is
+   where the detail page puts its "Fix & resubmit" form, and the drawer (a
+   read-only preview) passes none. #}
+{% macro rejection(application) %}
+<div class="problem {{ 'warn' if application.resubmittable }}" role="alert">
+  <strong>
+    Rejected{% if application.failureCode %} — {{ failure_label(application.failureCode) }}{% endif %}
+  </strong>
+  {# The code itself stays on screen beside its translation: it is what
+     Conduit's own support conversation will quote, and a code this build
+     has never seen is passed through by `failure_label` untranslated. #}
+  {% if application.failureCode %}<div><code class="raw">{{ application.failureCode }}</code></div>{% endif %}
+  {# The reviewer's own sentence, quoted as theirs — it is usually the only
+     place the offending field is named, and it is prose this console did
+     not write. #}
+  {% if application.failureMessage %}
+    <blockquote class="reason">{{ application.failureMessage }}</blockquote>
+  {% endif %}
+  {% if application.resubmittable %}
+    <div><em>A corrected application will be considered.</em></div>
+    {% if caller %}{{ caller() }}{% endif %}
+  {% elif application.resubmittable is sameas false %}
+    <div><em>This decision is final — do not resubmit.</em></div>
+  {% else %}
+    <div class="muted">Conduit did not say whether a corrected application would be considered.</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro attrs(rf) %}{% for k, v in rf.attrs.items() %}{% if v is sameas true %}{{ k }} {% else %}{{ k }}="{{ v }}" {% endif %}{% endfor %}{% endmacro %}
+
+{# The binding between a field and the error under it (
+   FORM_ENGINE_SPEC §7's mapper already decides WHICH field an error belongs to
+   — this is only how that decision is said to a screen reader).
+
+   Emitted on the CONTROL, not on the field box: `aria-describedby` is announced
+   when the control takes focus, and a wrapper `<div>` never does. That is why
+   the radio and checkbox-group branches below stamp it on every input rather
+   than once on the group — an operator tabbing into the third radio has to hear
+   why the answer was refused, and those two widgets have no single element
+   carrying the field's id.
+
+   `rf.name` is the field's canonical HTML name (`f.businessInfo.taxId`,
+   `p.2.f.firstName`) and is already the control's `id`, so `<name>-error` is
+   unique on the page for the same reason the id is. It is generated in the
+   template rather than in `forms.py` so the engine's contract is untouched:
+   nothing about `html_attrs`, the model or the mapper changes. #}
+{% macro err_attrs(rf) %}{% if rf.errors %} aria-invalid="true" aria-describedby="{{ rf.name }}-error"{% endif %}{% endmacro %}
+
+{# Same binding, for a control the form engine never sees (final
+   fixes): `payouts/new.html` hand-templates `amount`, `virtualAccountId`,
+   `whitelistRecipientId` and `purpose` outside `model.fields` (the route owns
+   some of them; discovery never carries whitelist picks or the route at
+   all), so there is no `RenderField` for `err_attrs` above to read. These two
+   macros take the raw `errors.fields` dict (`field_errors` in the template
+   context) and a name instead — `err_attrs({'errors': field_errors.get(n),
+   'name': n})` would do the same job; these just name the two calls a
+   hand-templated control actually needs. #}
+{% macro err_attrs_named(field_errors, name) %}{% if field_errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{% endmacro %}
+{% macro field_error(field_errors, name) %}
+{%- if field_errors.get(name) %}
+<div id="{{ name }}-error">
+  {% for message in field_errors[name] %}<div class="err">{{ message.detail }}</div>{% endfor %}
+</div>
+{%- endif %}
+{% endmacro %}
+
+{% macro field(rf) %}
+<div class="field{{ ' choices' if rf.widget in ('radio', 'checkboxes') }}"
+     {# The base required flag, for anything that counts what is still owed.
+        The `required` HTML attribute cannot carry it: the radio and checkbox-group
+        widgets below never emit it (on a checkbox group it would mean "tick every
+        box"), so the DOM alone under-reports. Display only — the server's
+        `active_fields` + `validate` remain the gate. #}
+     {% if rf.base_required %}data-req{% endif %}
+     {% if rf.field.conditions %}data-conditions='{{ rf.conditions_json }}'{% endif %}
+     {% if rf.field.required_when %}data-required-when='{{ rf.required_when_json }}'
+       data-required='{{ "true" if rf.base_required else "false" }}'{% endif %}>
+  <label for="{{ rf.name }}">{{ rf.field.label }}{% if rf.required %} <span aria-hidden="true">*</span>{% endif %}</label>
+  {% if rf.field.help %}<div class="help">{{ rf.field.help }}</div>{% endif %}
+  {% if rf.widget == 'select' %}
+    <select id="{{ rf.name }}" name="{{ rf.name }}" {{ attrs(rf) }}{{ err_attrs(rf) }}>
+      <option value="">—</option>
+      {# `option_label` only ever changes what the option *says*: when discovery
+         shipped no label (forms._options falls back to the raw value) a country
+         name or a de-SNAKE_CASEd form is appended after the raw value, which
+         stays on screen. The `value` attribute is untouched — it is what the
+         server, Conduit's errors and the condition engine all compare. #}
+      {% for value, label in rf.choices %}
+        <option value="{{ value }}" {{ 'selected' if rf.value == value }}>{{ option_label(value, label) }}</option>
+      {% endfor %}
+    </select>
+  {% elif rf.widget == 'checkboxes' %}
+    {% for value, label in rf.choices %}
+      {# Same rule as the select above — `countriesOfActivity` is 248 bare ISO
+         codes as a checkbox group, and `roles` is three SNAKE_CASE constants. #}
+      <label><input type="checkbox" name="{{ rf.name }}" value="{{ value }}"
+        {{ 'checked' if rf.value and value in rf.value }}{{ err_attrs(rf) }}> {{ option_label(value, label) }}</label>
+    {% endfor %}
+  {% elif rf.widget == 'radio' %}
+    {# The engine's boolean: a segmented Yes/No. Every attribute the inputs
+       carried is unchanged — same `type`, `name`, `value`s and `checked` rule —
+       and they are still ordinary radios nested inside this field's box, which
+       is all `conditions.js` (`node.querySelectorAll('input, select, textarea')`)
+       and `app.js` (`collect`, `remaining`) ever look for. The wrapper is one
+       `<div>` between them and the box; no third state is added, so a field
+       nobody has answered still submits nothing. #}
+    <div class="segmented">
+      <label><input type="radio" name="{{ rf.name }}" value="true" {{ 'checked' if rf.value is sameas true }}{{ err_attrs(rf) }}> Yes</label>
+      <label><input type="radio" name="{{ rf.name }}" value="false" {{ 'checked' if rf.value is sameas false }}{{ err_attrs(rf) }}> No</label>
+    </div>
+  {% elif rf.widget == 'checkbox' %}
+    <label><input type="checkbox" id="{{ rf.name }}" name="{{ rf.name }}" value="true"
+      {{ 'checked' if rf.value is sameas true }} {{ attrs(rf) }}{{ err_attrs(rf) }}> Yes</label>
+  {% elif rf.widget == 'textarea' %}
+    <textarea id="{{ rf.name }}" name="{{ rf.name }}" rows="3" {{ attrs(rf) }}{{ err_attrs(rf) }}>{{ rf.value|join('\n') if rf.value else '' }}</textarea>
+  {% else %}
+    <input type="{{ rf.widget }}" id="{{ rf.name }}" name="{{ rf.name }}"
+      value="{{ '' if rf.value is none else rf.value }}" {{ attrs(rf) }}{{ err_attrs(rf) }}>
+  {% endif %}
+  {# One box, one id, however many sentences Conduit sent about this field: an
+     `aria-describedby` naming a single element reads them all out, and a second
+     id per message would be four ids on one input. `.err` stays on each
+     sentence so the stylesheet (`.field .err`) is untouched. #}
+  {% if rf.errors %}
+    <div id="{{ rf.name }}-error">
+      {% for message in rf.errors %}
+        <div class="err">{{ message.detail }}
+          {% for allowed in message.allowed_values[:8] %}<span class="chip">{{ allowed }}</span>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Suggestions for the free-text country inputs, never a constraint: a
+   `<datalist>` lets the browser autocomplete `BGR` from "Bulgaria" while the
+   input still accepts anything the operator types — Conduit's discovery
+   response remains the only authority on what a country code may be. #}
+{% macro country_datalist() %}
+<datalist id="iso-countries">
+  {% for code, name in countries.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
+</datalist>
+{% endmacro %}
+
+{# The same trick for customer ids, and for the same reason: `GET /v2/customers`
+   has no name or search parameter and `GET /v2/transactions` filters by
+   `customerId` only, so a name can only become an id in the browser. The option
+   `value` is the id the filter actually sends; the label is the name the
+   operator actually knows. Suggestion, never a constraint — the input still
+   accepts any id typed into it, including one this page never listed. #}
+{# `id` is a parameter because one page now carries TWO of these lists: the
+   transfer form suggests every customer for the SOURCE and only the observed
+   holders of the source currency for the DESTINATION, and two
+   datalists sharing an id would silently make the first one win. Every other
+   caller keeps the id it has always used. #}
+{% macro customer_datalist(customers, id='known-customers') %}
+<datalist id="{{ id }}">
+  {# `display_name` is the console's one fallback chain (app/web/__init__.py) —
+     this macro used to carry its own copy of the expression, and a suggestion
+     list that named a customer differently from the row it points at is the
+     bug that costs. #}
+  {% for item in customers %}<option value="{{ item.id }}">{{ display_name(item) or item.id }}</option>{% endfor %}
+</datalist>
+{% endmacro %}
+
+{# The supporting-document widget, both polarities of `documentation.required`. One
+   macro because the two money screens must not describe the same discovery flag
+   differently, and because the *optional* case is the one where a second copy would
+   quietly diverge. Required: unchanged — a `wait` problem box stating the precondition,
+   the reason discovery gave, and the widget. `payments.documentation_gap` refuses a
+   submit with nothing attached, so the box is a real gate. Optional: the same widget
+   inside a native `<details>`, closed. Nothing about the wire changes — the chips are
+   the same `documentIds` hidden inputs, `forms.parse_submission` collects them the same
+   way and `payments.payout_body` puts them in the same `documents[]`. The only
+   difference is that discovery said no document is needed, so the widget is out of the
+   way until it is wanted. `acceptedDocumentTypes` is shown in both: it is discovery's
+   answer to "what would you accept", and it is as true when the answer is optional. #}
+{% macro attach_documents(documentation, rm, purpose, request) %}
+<section>
+  {% if documentation.required %}
+    <h3>Supporting document</h3>
+    <div class="problem wait" role="alert">
+      <strong>This route requires a supporting document</strong>
+      {% if documentation.reason %}<div>{{ documentation.reason }}</div>{% endif %}
+    </div>
+    {{ accepted_documents(documentation) }}
+    {{ document_widget(rm, purpose, request) }}
+  {% else %}
+    <details class="attach">
+      <summary>Attach a supporting document (optional)</summary>
+      <p class="help">
+        Discovery says this route needs none — <code>documentation.required</code> is
+        <code>false</code> for it. Anything attached here travels with the payment in the same
+        <code>documents[]</code> a required one would, and nothing is refused for being empty.
+      </p>
+      {{ accepted_documents(documentation) }}
+      {{ document_widget(rm, purpose, request) }}
+    </details>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro accepted_documents(documentation) %}
+  {% if documentation.acceptedDocumentTypes %}
+    <p class="muted">
+      Accepted:
+      {% for kind in documentation.acceptedDocumentTypes %}<span class="chip">{{ kind }}</span>{% endfor %}
+    </p>
+  {% endif %}
+{% endmacro %}
+
+{% macro uploader(request) %}
+  {# Every file picker posts to the one documents route, whose gate is
+     `document.upload` — not the permission of the form around it. A custom role
+     holding the form's own action but not the upload must not be painted a
+     picker that 403s; the note states the gate instead. Same actor idiom as the
+     export pill above. #}
+  {% if request.state.actor is defined and request.state.actor
+        and 'document.upload' in request.state.actor.permissions %}
+    {{ caller() }}
+  {% else %}
+    <p class="muted">Attaching files needs the <code>document.upload</code> permission.</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro document_widget(rm, purpose, request) %}
+  {% for message in rm.document_errors %}<div class="err" role="alert">{{ message.detail }}</div>{% endfor %}
+  {% call uploader(request) %}
+    <input type="file" data-upload data-purpose="{{ purpose }}" data-target="#doc-chips"
+           accept=".pdf,.png,.jpg,.jpeg">
+  {% endcall %}
+  <div id="doc-chips">
+    {% for doc_id in rm.document_ids %}
+      {% with field='documentIds', doc_id=doc_id, filename=doc_id %}{% include "onboarding/_chip.html" %}{% endwith %}
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro documents(rows) %}
+<ul>
+  {% for row in rows %}
+    <li>
+      <strong>{{ row.title }}</strong>{% if row.canonical_type %} <span class="muted">({{ row.canonical_type }})</span>{% endif %}
+      {% if row.source %}<div class="muted">From: {{ row.source }}</div>{% endif %}
+      {% if row.guidance %}<div class="help">{{ row.guidance }}</div>{% endif %}
+      {% if row.alternatives %}<div class="muted">Any one of: {{ row.alternatives|join(', ') }}</div>{% endif %}
+      {% if row.group_id %}<div class="muted">Satisfy any of these ({{ row.group_id }})</div>{% endif %}
+      {% if row.min_count %}<div class="muted">At least {{ row.min_count }}</div>{% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{# The submitted body, as it was sent. Recursive because the body is nested
+   (`businessInfo`, `ownership.persons[]`, `address`) and flattening it would
+   lose which person an answer belonged to — the one thing an operator reading
+   a rejection needs. Values are printed, never interpreted: this panel's whole
+   job is to show what was sent, so a friendlier rendering of a value would be
+   the panel editorialising about the evidence. #}
+{% macro submitted_body(value, label=None) %}
+  {% if value is mapping %}
+    <div class="submitted-group">
+      {% if label %}<strong>{{ label }}</strong>{% endif %}
+      {# Every table in this console opens inside the scroll wrapper
+         (`test_table_scroll_wrapper`): a submitted address line is exactly the
+         kind of long value that would otherwise push the page sideways. #}
+      <div class="table-scroll">
+      <table>
+        {% for key, child in value.items() %}
+          <tr>
+            <th>{{ key|humanize }}</th>
+            <td>
+              {% if child is mapping or (child is sequence and child is not string) %}
+                {{ submitted_body(child) }}
+              {% else %}
+                {{ child if child is not none else '—' }}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+      </div>
+    </div>
+  {% elif value is sequence and value is not string %}
+    {% for item in value %}
+      {{ submitted_body(item, label='#' ~ loop.index) }}
+    {% endfor %}
+  {% else %}
+    {# A list of scalars — a person's `roles`, most often — arrives here one
+       item at a time, so the label is what marks where one answer ends. Without
+       it the two roles of a multi-role person ran together as one string. #}
+    {% if label %}
+      <div class="submitted-group"><strong>{{ label }}</strong> {{ value if value is not none else '—' }}</div>
+    {% else %}
+      {{ value if value is not none else '—' }}
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+
+{# The virtual-accounts table, shared by the customer detail page and the
+   all-accounts index when a customer is selected. Both render Conduit's own
+   live list for one customer, so they render it the same way; before this they
+   were two copies that had to be edited together and would not have been.
+
+   The empty row is the caller's, via `{% call %}` — it is the one part the two
+   pages honestly differ on, because "this customer has no accounts" and "no
+   account here matches these filters" are different facts.
+
+   A balance block the list carried none of gets an em-dash: "we were told
+   nothing" and "the balance is zero" are different facts, and a zero here
+   would be the console inventing the reassuring one. The code is appended only
+   when it differs from the account's own asset, which on a single-asset fiat
+   account it never does. #}
+{% macro virtual_accounts_table(items, customer_id, balance_rows) %}
+  {% macro amounts(rows, bucket, code) %}
+    {% if rows %}
+      {% for row in rows %}<div>{{ amount(row[bucket]) }}{% if row.code and row.code != code %} {{ row.code }}{% endif %}</div>{% endfor %}
+    {% else %}
+      <span class="muted" title="Conduit stated no balance for this account">—</span>
+    {% endif %}
+  {% endmacro %}
+  <div class="table-scroll">
+  <table>
+    <tr>
+      <th>Account</th><th>Currency</th>
+      <th class="num">Available</th><th class="num">Pending</th><th class="num">Frozen</th>
+      <th>Status</th><th>Activated</th>
+    </tr>
+    {% for item in items %}
+      {% set balances = balance_rows(item) %}
+      {% set code = item.asset.code if item.asset else '' %}
+      <tr>
+        <td><a href="/customers/{{ customer_id }}/accounts/{{ item.id }}"><code>{{ item.id }}</code></a></td>
+        <td>{{ code or '—' }}</td>
+        <td class="num">{{ amounts(balances, 'available', code) }}</td>
+        <td class="num">{{ amounts(balances, 'pending', code) }}</td>
+        <td class="num">{{ amounts(balances, 'frozen', code) }}</td>
+        <td>{{ statuspill('virtual_accounts', item.status) }}</td>
+        <td>{{ item.activatedAt|ts }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">{{ caller() }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endmacro %}

@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Transactions · Conduit Console{% endblock %}
+{% block body %}
+{# "Move money", not one of the three verbs: this ledger lists all three, so a
+   pill naming one of them would be picking for the operator. It opens the
+   `/orders` launcher, which is the customer-first way in and still stands —
+   The action-first way in sits beside it (the ribbon's three Transact
+   entries land straight on the forms, which now ask WHO inside step 1). #}
+{% call m.page_head('transactions', 'Transactions') %}
+  {% if can_act %}<a class="btn primary" href="/orders#move-money">Move money</a>{% endif %}
+{% endcall %}
+{# **One sentence** (spec §4.5). What the page is and what All means is the
+   lede's whole job; "The tabs narrow it to one kind" moved verbatim into the
+   disclosure below the filter bar, with the two reference paragraphs that used
+   to sit between the bar and the first row. Nothing was rewritten. #}
+<p class="muted lede">
+  Every transaction, newest first — <code>type</code> is a repeatable parameter, so
+  <strong>All</strong> is one request for the four kinds this console works in, not four lists
+  stitched together.
+</p>
+
+{# The kind tabs: a flat band between two 2px rules, active on the accent-200
+   fill (DESIGN_DIRECTION "Transactions tabs"). All is first and is the default —
+   it carries no `type` at all, so it is also what an unknown one falls back to.
+   The four after it are the single-kind filter, each still its own `?type=` deep
+   link. #}
+<nav class="tabs" aria-label="Transaction type">
+  {# All the kinds this console works in — the crypto kinds (onramp, offramp,
+     conversion) are out of product scope, not forgotten: this is a fiat console
+     by design, and All must not claim a coverage it does not read. #}
+  <a class="{{ 'on' if not kind }}" href="/transactions" {{ 'aria-current="page"'|safe if not kind }}>All<span class="raw">{{ kinds|join(' ') }}</span></a>
+  {% for value in kinds %}
+    {# The tab reads as words and still shows the `type` it sends (QA F-002):
+       "Deposit return" is what the operator is looking for, `deposit_return` is
+       what the URL, the endpoint and Conduit's own DTO call it. #}
+    <a class="{{ 'on' if value == kind }}" href="/transactions?type={{ value }}"
+       {{ 'aria-current="page"'|safe if value == kind }}>{{ enum_label(value) }}<span class="raw">{{ value }}</span></a>
+  {% endfor %}
+</nav>
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/transactions" class="bar row"
+      hx-get="/transactions" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  {# Only on a single-kind tab: All is the absence of a `type`, and submitting an
+     empty one would put a parameter in the URL that says nothing. #}
+  {% if kind %}<input type="hidden" name="type" value="{{ kind }}">{% endif %}
+  {# The rows-per-page control lives in the table footer, but it has to survive a
+     filter submit as well as a page turn — otherwise filtering silently reverts
+     to 25. #}
+  <input type="hidden" name="limit" value="{{ limit }}">
+  {# `GET /v2/transactions` filters by `customerId` and by nothing name-shaped,
+     so the datalist is what lets an operator arrive with a name and leave with
+     the id the endpoint wants. Not a constraint: an id that is not on the
+     first page is still typeable. #}
+  <label>Customer <input type="text" name="customerId" value="{{ filters.customerId }}"
+         list="known-customers" placeholder="name or cus_…"></label>
+  {{ m.customer_datalist(customers) }}
+  {# The contact filter. A `<select>` rather than the customer
+     box's datalist: its value is a contact's uuid, which nobody types, and the
+     option list is one customer's address book — small, local, and exhaustive.
+     Disabled with its reason on it where it could not mean anything: a contact
+     belongs to one customer, and the payments this console can link to one are
+     payouts, which land on the withdrawal tab. #}
+  <label>Contact
+    <select name="contact" {{ 'disabled' if not contact_ready }}>
+      <option value="">any</option>
+      {% for c in contacts %}
+        <option value="{{ c.id }}" {{ 'selected' if c.id|string == contact_id }}>{{ c.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {# Conduit's own filters, off when the contact filter is on: a contact-filtered
+     view is answered from this console's trail and makes no list request, so
+     these have nothing to ride on. `list_query` drops them for the same reason,
+     which is what keeps this page, its pager and its CSV export in agreement. #}
+  <label>Status
+    <select name="status" {{ 'disabled' if contact }}>
+      <option value="">any</option>
+      {% for value in statuses %}
+        <option value="{{ value }}" {{ 'selected' if value in selected_statuses }}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Created after <input type="date" name="createdAfter" value="{{ filters.createdAfter }}" {{ 'disabled' if contact }}></label>
+  <label>Created before <input type="date" name="createdBefore" value="{{ filters.createdBefore }}" {{ 'disabled' if contact }}></label>
+  <label>External reference
+    <input type="text" name="externalReference" value="{{ filters.externalReference }}" {{ 'disabled' if contact }}>
+  </label>
+  {# Deliberately a second box rather than a rename of the one above: the pin
+     makes them two different parameters, and its own words on
+     `externalReference` are "Not a Conduit id, and not your own
+     `clientReferenceId`". One box searching both would be a lie about whose
+     reference was found. #}
+  <label>Ledger reference
+    <input type="text" class="num" name="clientReferenceId" value="{{ filters.clientReferenceId }}"
+           {{ 'disabled' if contact }}>
+  </label>
+  <button type="submit">Filter</button>
+  {# Back to this tab, unfiltered. A link, not JS: clearing a filter is a URL,
+     and the tab is not a filter — dropping it would land on `deposit`. #}
+  <a class="btn reset" href="/transactions{{ '?type=' ~ kind if kind }}">Reset</a>
+</form>
+
+{# **The teaching prose, demoted**. Seventy-four
+   words a daily operator has read once used to sit between the filter bar and
+   the first row, on every visit — 85 with the suggestions note, which is the
+   spec's "~90". They are not deleted — the copy is more
+   honest than most treasury software manages, and the boxes it explains are
+   right above it — so they move, verbatim, one disclosure away. Native
+   `<details>`, the house idiom (`batches/new.html`, `onboarding/start.html`):
+   no JS, no state, and the browser's own semantics for a screen reader.
+
+   What did NOT move: the contact-boundary paragraph below. It renders only
+   while the contact filter is in force, is the "state that boundary
+   in the UI", and a statement about what the view on screen can and cannot see
+   must not be behind a click.
+
+   **The summary line is house-standardised** (fresh-context design pass,
+   the design pass). It shipped as "What the two reference boxes match, and
+   how the tabs read" — twelve words, one compound "and" clause — against the
+   idiom every other `<summary>` in this console already keeps: a short "What
+   X" noun phrase, one clause, no "and" (`macros.html`'s "Attach a supporting
+   document (optional)", `batches/new.html`'s "What each purpose requires",
+   `onboarding/start.html`'s "What this decides"). It does not need to name
+   both things the disclosure holds — none of the others enumerate their
+   contents either. #}
+<details class="teaching">
+  <summary>What the reference boxes match</summary>
+  <p class="muted">
+    Ledger reference: the reference this console stamps on everything it sends — an operation's id.
+    Paste one to find its transaction.
+    {% if not kind %}
+      {# The pin's own words on `externalReference`: "Both are matched, so pair it with
+         `type=deposit` if you only want deposits." On All both sides are in the feed by
+         definition, so the box is stated rather than quietly narrowed. #}
+      External reference is the other side's — the sending bank's on a deposit, the payout
+      provider's on a withdrawal — and on <strong>All</strong> it matches both.
+    {% endif %}
+  </p>
+  {% if not contact_ready %}
+    <p class="muted">
+      Filter by contact: pick a customer on the <em>Withdrawal</em> tab. A contact belongs to one
+      customer, and the payments this console can link to one are payouts.
+    </p>
+  {% endif %}
+  <p class="muted">The tabs narrow it to one kind.</p>
+</details>
+
+{# The honest boundary, stated where the filter is used and only when it is in
+   force ("state that boundary in the UI"). `GET /v2/transactions`
+   has no recipient-shaped parameter — this filter is answered from the console's
+   own trail, so its coverage is exactly the payments this console sent and
+   recorded a contact for, and it says so rather than presenting itself as a
+   search of the ledger. #}
+{% if contact %}
+  <p class="muted">
+    Payouts <strong>this console</strong> sent to <strong>{{ contact.label }}</strong>{% if contact.deleted %}
+    (<em>deleted</em> — its coordinates were purged; the name and the payments it received are
+    kept, which is what lets this filter still answer){% elif contact.archived %}
+    (<em>archived</em> — retired from the pickers; the payments it received are still here){% endif %} and recorded
+    the contact on: the operator picked it and the destination submitted was still it. A payment
+    made outside this console, or before this contact existed, is not here — and neither is one
+    sent on an <em>edited</em> prefill, because that payment did not go to the saved contact.
+    The payout that first saved the contact was typed rather than picked, so it is not a match
+    either. Conduit's own list filters are switched off above: this view is a set of transactions
+    read one by one, not a query.
+  </p>
+{% endif %}
+
+{% if customers_more %}
+  {# The suggestions are the first cursor page, not the customer list. Said out
+     loud rather than left to a tooltip: a name-completion list that quietly
+     stops at 25 would let an operator conclude a customer does not exist. #}
+  <p class="muted">Customer suggestions are the first 25 —
+    <a href="/customers">find the rest in Customers</a>.</p>
+{% endif %}
+
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{# The only one of the four lists whose request carries a sort: `app/web/
+   transactions.py` sends `sortBy=createdAt&sortOrder=desc`. #}
+{# The noun changes with the filter, because the *set* changes with it: a
+   contact-filtered view is not a page of the ledger, it is the console-linked
+   payouts to one contact, and "newest first" means the order this console sent
+   them in rather than Conduit's `createdAt`. #}
+{{ m.result_meta(request, page.items|length,
+                 'console-linked payout' if contact else 'transaction',
+                 newest=true, problem=problem, per_page=limit,
+                 note='by when this console sent them' if contact else '',
+                 export=export_url(request, 'transactions')) }}
+
+<div class="table-scroll">
+<table>
+  <tr>
+    <th>Transaction</th>
+    {# Only where the rows differ: on a single-kind tab every cell would repeat
+       the tab above it, and the tab strip already says which kind this is. #}
+    {% if not kind %}<th>Type</th>{% endif %}
+    <th>Status</th><th class="num">Amount</th><th>Customer</th>
+    <th>Created</th><th>Completed</th>
+  </tr>
+  {% for item in page.items %}
+    {# The 3px left flag: a terminal failure is the one row an operator scanning
+       this table must not miss (DESIGN_DIRECTION "Tables"). `is_exception` reads
+       the same PILL_TONES table the pill below renders from, without logging an
+       unknown status twice. #}
+    <tr {{ 'class="exception"'|safe if is_exception('transactions', item.status) }}>
+      <td><a href="/transactions/{{ item.id }}"><code>{{ item.id }}</code></a></td>
+      {# The house pairing (batches/detail.html's purpose column): the words an
+         operator reads, the wire value demoted under them in mono — because
+         `deposit_return` is what the URL, the endpoint and Conduit's own DTO
+         call it. A kind this build has never heard of shows its raw value and
+         nothing invented. #}
+      {% if not kind %}
+        <td>{{ enum_label(item.type) or '—' }}<div class="muted"><code class="raw">{{ item.type }}</code></div></td>
+      {% endif %}
+      <td>
+        {# A transaction the console's own trail names and Conduit would not
+           answer for. It is still a row: dropping it would make a contact's
+           payment history quietly shorter than it is, which is the one thing
+           this filter must never do. #}
+        {% if item.unreadable %}
+          <span class="muted">could not be read — open it, or refresh</span>
+        {% endif %}
+        {{ m.statuspill('transactions', item.status) if not item.unreadable }}
+        {# `hasRfi` rides every row of this list already — Conduit derives it at
+           read time on every transaction view DTO — so badging a held payment
+           costs nothing and needs no local flag. It stays
+           true after the RFI resolves, so the word is "has", not "held": which
+           of the two it is takes the RFI's own status, and that is a read the
+           detail page does. #}
+        {% if item.hasRfi %}<div class="muted">information requested</div>{% endif %}
+        {# **What happens next** (spec §4.1: the column "survives and should be
+           promoted ... widen its coverage"). One muted sentence per transaction
+           state, from `payments.TRANSACTION_NEXT_STEP` — the Overview has
+           carried exactly this per *operation* state and the
+           ledger, which is the other table an operator scans daily, had none.
+
+           In the status cell, not an eighth column: this table is seven columns
+           wide on All inside a 1180px page, and a column of prose would push it
+           into horizontal scroll at every width — while the cell already stacks
+           the muted lines that qualify a state ("information requested", the
+           stage). The sentence *is* the state's, so this is where it belongs.
+
+           `stage` wins when Conduit named one: "awaiting the customer" answers
+           "whose problem is this" more precisely than the status can, and two
+           muted lines saying the same thing is the cost §4.5 is removing
+           elsewhere on this page. `completed` has no sentence at all — nothing
+           happens next — and neither does a status this build has never heard
+           of. #}
+        {% if item.stage %}<div class="muted">{{ stage_label(item) }}</div>
+        {% elif next_step.get(item.status) %}
+          <div class="muted next-step">{{ next_step.get(item.status) }}</div>
+        {% endif %}
+      </td>
+      {# A conversion leg's content is the *pair* of amounts, and `amount_of`
+         can only state one of them — it answered "16.35 EUR" for a row whose
+         whole point is that 20.00 USD became it. `converted` is the same
+         function the typed detail page uses, and it returns "" for every
+         single-asset movement, so the deposit and withdrawal tabs are
+         untouched. #}
+      <td class="num">{{ converted(item) or amount_of(item) }}</td>
+      {# `customerName` is the row's own answer and beats the resolver's map;
+         the map covers the rows Conduit omitted it on, and a miss is the id. #}
+      <td>{{ m.customer_cell(names, item.customerId, name=item.customerName or '') }}</td>
+      <td>{{ item.createdAt|ts }}</td>
+      <td>{{ item.completedAt|ts }}</td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts; the count
+       above already refuses to merge them, and so must the row that replaces
+       the rows (recipients/list.html is the house model). #}
+    <tr><td colspan="{{ 7 if not kind else 6 }}" class="muted">
+      {% if problem %}The list could not be read — see above.
+      {% elif contact %}No payout to <strong>{{ contact.label }}</strong> has been sent through this
+      console — or none that recorded the contact. The boundary above says which payments this
+      view can and cannot see; the ledger itself is
+      <a href="/transactions?type={{ kind }}&customerId={{ filters.customerId }}">unfiltered here</a>.
+      {% elif kind %}No {{ enum_label(kind)|lower }} transactions <span class="raw">{{ kind }}</span> on this page.
+      Widen the filters above, or <a href="/transactions">see every kind</a>.
+      {% else %}No transactions on this page. This is <strong>All</strong> — every kind this
+      console works in was asked for — so widening the filters above is the only thing left to
+      try.{% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# Built server-side: a cursor is an opaque token, and every filter (and the
+   page size) has to survive the page turn (app/web/__init__.py::pager). #}
+{{ m.table_foot(pager) }}
+{% endblock %}

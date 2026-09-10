@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{# The failure paths, inside the chrome (Arca spec §0.2's
+   second blocking finding — `404`/`500` rendered raw JSON with no chrome and no
+   way back, the framework default showing through the one surface nobody
+   styled).
+
+   ONE template for all four statuses rather than three files: the copy is the
+   only thing that differs and it lives in `web.ERROR_COPY`, so the chrome, the
+   ways back and the reference line cannot drift between a 403 and a 404.
+
+   **Nothing about the failure is on this page.** No exception text, no
+   traceback, no path, no host, no permission name, no request body — a page a
+   stranger can reach by typing a URL states what happened to THEM and nothing
+   about the machine. The 500's `reference` is the exception: it is an id this
+   console minted for the request and logged beside the traceback, so it names a
+   log line to whoever runs the install and nothing at all to anybody else. #}
+{% block title %}{{ heading }} · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('', heading, sentence) }}
+
+{# The route's own sentence about THIS refusal, when it wrote one (`exports.py`
+   refusing a file that would silently be the unfiltered view). Escaped like
+   everything else, and never Conduit's words — see `web.render_error`. #}
+{% if detail %}<p class="help">{{ detail }}</p>{% endif %}
+
+{# The way back. Two links, no more: the section list is already on screen in
+   the ribbon, and a page that offers ten guesses at what you wanted reads as a
+   page that does not know. Overview is where this console's own record lives
+   and is reachable by everyone who can sign in; the browser's own Back is the
+   other honest answer and is not something a link should fake. #}
+<p><a href="/">Go to the Overview</a></p>
+
+{% if reference %}
+  <div class="problem" role="alert">
+    <strong>Reference for this failure</strong>
+    <div class="meta">
+      {# Mono and selectable, like every other machine value on this console:
+         it is meant to be copied into a message to whoever runs the install,
+         who can find the log line it stamps. #}
+      <code class="num">{{ reference }}</code>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

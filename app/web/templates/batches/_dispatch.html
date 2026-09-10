@@ -1,0 +1,50 @@
+{# The "ready to dispatch" card, split out of batches/detail.html so the page can
+   render it for EITHER of the two permissions the batch's two halves need
+   (`batch.upload` prepares, `batch.dispatch` sends) without duplicating it.
+   Nothing here is new: it is the same card, moved. #}
+  <div class="card" role="status">
+    {# `ready` is amber on the pill above and this is the sentence that amber
+       means: the machine has finished, the decision is the operator's. The
+       button itself is deliberately NOT here — it lives on the confirm screen,
+       which re-derives every number it shows (funding account, balance, totals,
+       exclusions) rather than inheriting them from this page. #}
+    <strong>
+      {% if batch.status == 'ready' %}Ready to dispatch — nothing has been sent
+      {% else %}Partly dispatched{% endif %}
+    </strong>
+    <p>
+      {% if batch.status == 'ready' %}
+        Dispatching will send {{ totals.valid }} payout{{ '' if totals.valid == 1 else 's' }} totaling
+        {% for asset, amount in totals.by_currency.items() %}<strong class="num">{{ amount }} {{ asset }}</strong>{% endfor %} —
+        each is sent exactly once. This console has not created a payout for any row of this batch.
+      {% else %}
+        {# The rows a dispatch would actually put on the wire — the confirm
+           screen's own `sending`, off `SENDABLE_ROW_STATES`, because the next
+           sentence promises this card picks up "exactly those". A refused row
+           is one of them: nothing about it reached Conduit. #}
+        {{ sending.valid }} row{{ '' if sending.valid == 1 else 's' }} of this batch still
+        {{ 'has' if sending.valid == 1 else 'have' }} no payout — a dispatch that was interrupted,
+        or one still running. Dispatching again picks up exactly those: every row already sent
+        resolves to the payout it already has.
+      {% endif %}
+    </p>
+    {% if batch.document_ids %}
+      <p class="muted">
+        {{ batch.document_ids|length }} shared document{{ '' if batch.document_ids|length == 1 else 's' }}
+        {{ 'rides' if batch.document_ids|length == 1 else 'ride' }} with the rows whose purpose
+        requires one — not with the rest. A purpose that asks for no document sends none.
+      </p>
+    {% endif %}
+    <p class="row">
+      {# Preparing a batch and dispatching one are separate permissions, so this
+         is the one place the two halves of `can_act` come apart. The gap is
+         named rather than left as an empty row: a batch that says it is ready to
+         dispatch and then offers nothing reads as a broken page, not as a
+         boundary. #}
+      {% if can_dispatch %}
+        <a class="btn primary" href="{{ request.url.path }}/confirm">Review and dispatch</a>
+      {% else %}
+        <span class="muted">Dispatching this batch needs the <code>batch.dispatch</code> permission.</span>
+      {% endif %}
+    </p>
+  </div>

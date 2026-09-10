@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Overview · Conduit Console{% endblock %}
+{% block body %}
+{% set overview_sentence = "This console's own record — operations, projections and drafts."
+   ~ " It renders whether or not Conduit is reachable." %}
+{# No page-head primary here any more (2026-09-02). The pill landed for one stated
+   reason — "an operator with a full dashboard had no way to start one from where they
+   land" — and the chrome cluster is now that way, on this page and every other.
+   Onboarding is not the Overview's own verb; this page reads the state of money. The
+   two empty-state links stay: they are the sentence that explains why a table is empty,
+   not a control. #}
+{{ m.page_head('operations', 'Overview', overview_sentence) }}
+
+{# The tour's first-run OFFER. Rendered on every load of this page
+   and `hidden` on every one of them: whether an operator has already seen the
+   tour is a browser fact (localStorage, else sessionStorage), and the server
+   keeps no tour state at all — so app.js is what unhides this, and a console
+   with JS off simply never shows it. An offer, deliberately, not an auto-opened
+   overlay: an operator who landed here mid-incident must not have the page
+   taken away from them. #}
+<div class="card" id="tour-offer" hidden>
+  <p>
+    <strong>New to this console?</strong>
+    Six steps on what the chrome means and where each flow starts. It reads only —
+    nothing is sent, and you can leave with Esc.
+  </p>
+  <p class="row">
+    <button type="button" class="primary" data-tour="start">Take the tour</button>
+    <button type="button" data-tour="dismiss">Not now</button>
+  </p>
+</div>
+
+{# Four counts of exactly what the four tables below list: the tables show the
+   ten newest, the band says how many there are. Nothing here is a second source
+   for a number — same tables, same predicates, one COUNT each, no Conduit call.
+   Only the first cell may take a colour, and only when it is not zero.
+
+   A cell that has a truthful destination is a link over the whole cell — one
+   `<a>`, so it is one tab stop and one target rather than a number you have to
+   hit exactly. A cell with no destination whose population matches is plain
+   text and stays plain text: `app/web/dashboard.py` carries the check for each
+   of the four, and the fourth deliberately does not navigate. #}
+<div class="stat-band">
+  {% for cell in stats %}
+    <div>
+      {% if cell.url %}<a href="{{ cell.url }}">{% endif %}
+      <p class="label">{{ cell.label }}</p>
+      {# `hero-num` is the editorial-numeral class: summaries
+         only, never a table cell. The band is its first consumer and the one
+         the direction names. #}
+      <p class="figure hero-num{{ ' ' ~ cell.tone if cell.tone }}">{{ cell.value }}</p>
+      <p class="note">{{ cell.note }}</p>
+      {% if cell.url %}</a>{% endif %}
+    </div>
+  {% endfor %}
+</div>
+
+<h2 id="needs-attention">Needs attention</h2>
+{# `id` for the product tour's third step: the heading already had one, but what
+   the step is about is the rows and their colour, not the word above them. #}
+<div class="table-scroll">
+<table id="attention-table">
+  <tr><th>Type</th><th>State</th><th>Customer</th><th>Age</th><th>What happens next</th><th></th></tr>
+  {% for row in operations %}
+    <tr {{ 'class="exception"'|safe if is_exception('operations', row.op.state) }}>
+      <td>
+        <code>{{ row.op.type }}</code>
+        {# The operator's own note, under the machine word it labels. Nothing at
+           all when unset — this column is the type, and the note is a subtitle
+           on it, not a second column of em-dashes. #}
+        {% if row.op.reference %}<div class="muted">{{ row.op.reference }}</div>{% endif %}
+      </td>
+      <td>{{ m.statuspill('operations', row.op.state) }}</td>
+      {# An operations row is this console's own record and carries no name, so
+         this cell is the resolver's map or nothing: the name where the one
+         bounded customers read resolved it, the bare id where it did not, and an
+         em-dash where the operation names no customer at all (`m.customer_cell`
+         is all three). #}
+      <td>{{ m.customer_cell(names, row.op.customer_id or '',
+             href='/customers/' ~ row.op.customer_id if row.op.customer_id else '') }}</td>
+      {# The age is relative on purpose — "how long has this been someone's
+         problem" is the column's whole question. The hover is the absolute, and
+         it is ISO with its offset on it (the column is `timezone=True`), not
+         Python's `str()` space-separated form: every other stamp this console
+         hovers is ISO, and a support conversation quotes one shape. #}
+      <td class="num" title="started {{ row.op.created_at.isoformat() }}">{{ row.age }}</td>
+      <td class="muted">{{ row.next_step }}</td>
+      <td><a href="/operations/{{ row.op.id }}">Open</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">
+      <p class="lead">Nothing is waiting on a human.</p>
+      <p class="detail">
+        Every mutation this console sent has an answer.
+        <a href="/applications">See what they produced</a>.
+      </p>
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+{% if more_operations %}
+  {# No operations index exists to link at: these are the ten oldest. #}
+  <p class="muted">Showing the ten oldest unresolved operations.</p>
+{% endif %}
+
+<h2 id="pending-applications">Pending applications</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Application</th><th>Customer</th><th>Status</th><th>Observed</th></tr>
+  {% for entry in applications %}
+    <tr {{ 'class="exception"'|safe if is_exception('applications', entry.row.state) }}>
+      <td><a href="/applications/{{ entry.row.resource_id }}"><code>{{ entry.row.resource_id }}</code></a></td>
+      {# An application payload carries `customerId` and never a name, so this
+         cell is the bounded map's job — and the bare id when it misses. #}
+      <td>{{ m.customer_cell(names, entry.customer.id,
+             href='/customers/' ~ entry.customer.id, name=entry.customer.name) }}</td>
+      <td>{{ m.statuspill('applications', entry.row.state) }}</td>
+      <td>{{ (entry.row.observed_at or entry.row.updated_at)|ts }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">
+      <p class="lead">No application is waiting on a decision.</p>
+      {% if can_edit %}
+        <p class="detail">A new customer starts here: <a href="/onboarding">Start an onboarding</a>.</p>
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+{% if more_applications %}
+  {# The stat band's second tile links here, so this table has to say when it is
+     showing ten of more rather than ending quietly at ten. #}
+  <p class="muted">Showing the ten most recently observed.</p>
+{% endif %}
+<p><a href="/applications">View all applications →</a></p>
+
+<h2>Open drafts</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Country</th><th>Reference</th><th>Updated</th><th></th></tr>
+  {% for draft in drafts %}
+    <tr>
+      <td>{{ draft.country or '—' }}</td>
+      <td><code>{{ draft.client_reference_id or draft.id }}</code></td>
+      <td>{{ draft.updated_at|ts }}</td>
+      <td><a href="/onboarding/{{ draft.id }}">Open</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">
+      <p class="lead">Nothing half-finished.</p>
+      {% if can_edit %}
+        <p class="detail">Answers autosave from the first one: <a href="/onboarding">Start an onboarding</a>.</p>
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+<p><a href="/drafts">View all drafts →</a></p>
+
+<h2 id="recent-transactions">Recent transactions</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Transaction</th><th>Customer</th><th>Status</th><th>Observed</th></tr>
+  {% for entry in transactions %}
+    <tr {{ 'class="exception"'|safe if is_exception('transactions', entry.row.state) }}>
+      <td><a href="/transactions/{{ entry.row.resource_id }}"><code>{{ entry.row.resource_id }}</code></a></td>
+      {# A transaction payload observed through a *read* carries `customerName`
+         (every transaction view DTO does) and that is the row's OWN answer, so
+         it beats the map; a thin webhook delivery carries only the id and falls
+         through to the map, then to the id. #}
+      <td>{{ m.customer_cell(names, entry.customer.id,
+             href='/customers/' ~ entry.customer.id, name=entry.customer.name) }}</td>
+      <td>{{ m.statuspill('transactions', entry.row.state) }}</td>
+      <td>{{ (entry.row.observed_at or entry.row.updated_at)|ts }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">
+      <p class="lead">Nothing observed yet.</p>
+      <p class="detail">
+        This fills in as webhooks arrive. <a href="/transactions">Open the ledger</a>.
+      </p>
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+<p><a href="/transactions">View all transactions →</a></p>
+{% endblock %}

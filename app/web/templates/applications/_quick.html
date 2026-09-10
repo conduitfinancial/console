@@ -1,0 +1,73 @@
+{% import "macros.html" as m %}
+{# The applications list's quick view — the drawer BODY, swapped into the shell
+   `applications/list.html` renders once (DESIGN_DIRECTION "Detail drawer").
+
+   What this is: the row you are looking at, without leaving the list. What it
+   deliberately is NOT is a second detail page — it carries no operation panel,
+   no RFI panel, no simulate controls, no "Fix & resubmit". Every one of those
+   is an action on a record, and an action belongs on the page that IS the
+   record. The last line of this fragment is the way to it.
+
+   Read-only, viewer and operator alike: there is nothing here to gate. #}
+{# No dismiss in here: Close lives in the shell (`applications/list.html`), so
+   there is exactly one of it in every state this body can be in. #}
+<div class="drawer-top">
+  <p class="eyebrow">application</p>
+  <p class="head-id num">{{ application_id }}</p>
+</div>
+
+{% if problem %}
+  {{ m.problem(problem) }}
+  {# A failed read still leaves somewhere to go: the full page asks Conduit
+     again, and its own failure rendering is the one with the operation panel
+     under it. #}
+  <p><a class="btn primary" href="/applications/{{ application_id }}">Open application</a></p>
+{% else %}
+  <div class="row">
+    {{ m.app_statuspill(application) }}
+  </div>
+
+  {# Definition rows, the shape every detail surface on this console already
+     uses (`applications/_status.html`, `operations/_panel.html`): `<th>` label,
+     `<td>` value. The direction's 110px uppercase micro-label column is CSS on
+     `#drawer table th` — the markup stays the house pattern, so a row added
+     here and a row added there still look like the same console. #}
+  <div class="table-scroll">
+  <table>
+    <tr><th>Type</th>
+      <td {% if application.type %}title="{{ application.type }}"{% endif %}>{{ enum_label(application.type) or '—' }}</td></tr>
+    {# Name first, `cus_…` under it — `m.customer_cell`, the same resolver map
+       the list itself renders names from. No link: the drawer's actions below
+       are where this goes, and a row that is both a fact and a navigation is
+       two things. #}
+    <tr><th>Customer</th><td>{{ m.customer_cell(names, application.customerId) }}</td></tr>
+    <tr><th>Reference</th>
+      <td>{% if application.clientReferenceId %}<code>{{ application.clientReferenceId }}</code>
+          {% else %}<span class="muted">—</span>{% endif %}</td></tr>
+    <tr><th>Created</th><td>{{ application.createdAt|ts }}</td></tr>
+    <tr><th>Updated</th><td>{{ (application.updatedAt or application.createdAt)|ts }}</td></tr>
+  </table>
+  </div>
+
+  {% if application.status == 'rejected' %}
+    {# The same box the detail page renders, from the same macro — the
+       resubmittable/final split is the operator's next move and it must read
+       identically in both places. No `{% call %}`: the correcting action is the
+       full page's, and offering it here would start a draft from a preview. #}
+    {{ m.rejection(application) }}
+  {% endif %}
+{% endif %}
+
+{# The canvas's own pair. "Open application" is the primary: this drawer is a
+   look, and the record is one click away. "Open customer" is absent — not
+   disabled — when the application names no customer, which is every application
+   Conduit has not yet approved. The failed-read branch above renders its own
+   "Open application" and never reaches here. #}
+{% if not problem %}
+  <div class="drawer-actions">
+    <a class="btn primary" href="/applications/{{ application_id }}">Open application</a>
+    {% if application.customerId %}
+      <a class="btn" href="/customers/{{ application.customerId }}">Open customer</a>
+    {% endif %}
+  </div>
+{% endif %}

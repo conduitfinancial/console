@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ order_id }} · Conduit Console{% endblock %}
+{% block body %}
+{# An order DTO carries `customerId` and no name, so the heading is whatever the
+   bounded customers read resolved (`with_customer_names`, gathered with the
+   order read — no added latency). A miss keeps the noun and the mono id. #}
+{% set customer_name = names.get(order.customerId) if order else '' %}
+{{ m.page_head('order', customer_name or 'Order', mono=order_id) }}
+
+{# The whole page re-fetches itself every 15s while the order is not terminal and
+   lifts this one panel out of the response — the same trick the operation page
+   uses, so there is no fragment route to keep in step. An unknown status is
+   never terminal, so it keeps refreshing rather than claiming to be over. #}
+<div id="order-status"
+     {% if order and not terminal %}
+       hx-get="/orders/{{ order_id }}" hx-trigger="every 15s"
+       hx-select="#order-status" hx-target="#order-status" hx-swap="outerHTML"
+     {% endif %}>
+  {% if problem %}{{ m.problem(problem) }}{% endif %}
+  {% if order %}
+    <p class="row">
+      {{ m.statuspill('orders', order.status) }}
+      <span class="pill muted">{{ view.type or 'unknown type' }}</span>
+      <span class="num">{{ view.source_amount or '—' }} → {{ view.destination_amount or '—' }}</span>
+      {% if order.customerId %}
+        <a href="/customers/{{ order.customerId }}">{% if customer_name %}{{ customer_name }} {% endif %}<code>{{ order.customerId }}</code></a>
+      {% endif %}
+      {% if terminal %}<span class="muted">settled — live refresh stopped</span>
+      {% else %}<span class="muted">refreshing every 15s</span>{% endif %}
+    </p>
+
+    <h2>Summary</h2>
+    <div class="table-scroll">
+    <table>
+      <tr><th style="width:16rem">Pair</th><td>{{ view.source_asset }} → {{ view.destination_asset }}</td></tr>
+      <tr><th>Total debit</th><td class="num">{{ view.total_debit or '—' }}</td></tr>
+      <tr><th>Locked side</th><td>{{ view.lock_side or '—' }}</td></tr>
+      <tr><th>Execution must start by</th><td>{{ view.lock_expires_at|ts }}
+        <div class="muted">
+          Not merely a funding deadline: an order whose execution has not been claimed by then is
+          cancelled with reason <code>expired</code>.
+        </div></td></tr>
+      <tr><th>Execution</th>
+        <td>
+          {% if view.execution_trigger %}claimed by <code>{{ view.execution_trigger }}</code>
+          {% elif view.auto_execute %}automatic, once the source covers the total debit
+          {% else %}not started — press Execute below{% endif %}
+        </td></tr>
+      {% if view.quote_option_id %}
+        <tr><th>Quote option</th><td><code>{{ view.quote_option_id }}</code></td></tr>
+      {% endif %}
+      {% if order.clientReferenceId %}
+        <tr><th>Client reference</th><td><code>{{ order.clientReferenceId }}</code></td></tr>
+      {% endif %}
+      <tr><th>Created</th><td>{{ order.createdAt|ts }}</td></tr>
+      {% if order.executedAt %}<tr><th>Executed</th><td>{{ order.executedAt|ts }}</td></tr>{% endif %}
+      {% if order.cancelledAt %}
+        <tr><th>Cancelled</th><td>{{ order.cancelledAt|ts }}
+          <span class="muted">{{ view.cancellation_reason }}</span></td></tr>
+      {% endif %}
+    </table>
+    </div>
+
+    {% if view.failure_code %}
+      <div class="problem" role="alert">
+        <strong>{{ view.failure_code }}</strong>
+        {% if view.failure_message %}<div>{{ view.failure_message }}</div>{% endif %}
+      </div>
+    {% endif %}
+
+    <h2>Rate</h2>
+    <div class="table-scroll">
+    <table>
+      {% for row in view.rate %}
+        <tr><th style="width:16rem">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+      {% else %}
+        <tr><td class="muted">Conduit published no rate block on this order.</td></tr>
+      {% endfor %}
+    </table>
+    </div>
+
+    <h2>Fees</h2>
+    <div class="table-scroll">
+    <table>
+      <tr><th>Type</th><th>Charged by</th><th class="num">Amount</th></tr>
+      {% for fee in view.fees %}
+        <tr><td>{{ fee.type }}</td><td>{{ fee.owner }}</td><td class="num">{{ fee.amount }}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No fees on this order.</td></tr>
+      {% endfor %}
+      {% if view.markup %}
+        <tr>
+          <td>your markup</td><td>you</td>
+          <td class="num">{{ view.markup.charged or view.markup.flat or '' }}
+            {% if view.markup.bps %}<div class="muted">{{ view.markup.bps }} bps</div>{% endif %}</td>
+        </tr>
+      {% endif %}
+    </table>
+    </div>
+
+    <h2>Transactions</h2>
+    <div class="table-scroll">
+    <table>
+      {% for txn in view.transactions %}
+        <tr><td><a href="/transactions/{{ txn }}"><code>{{ txn }}</code></a></td></tr>
+      {% else %}
+        <tr><td class="muted">No transaction linked yet — one appears when the conversion moves money.</td></tr>
+      {% endfor %}
+    </table>
+    </div>
+
+    {% if can_act %}
+      <h2>Actions</h2>
+      {% if operation and operation.pending %}
+        <p class="muted">
+          This console has an unresolved <code>{{ operation.op.type }}</code> against this order —
+          see <strong>This console's record</strong> below before acting again.
+        </p>
+      {% endif %}
+      <p class="row">
+        {% if can_execute and not (operation and operation.pending) %}
+          <form hx-post="/orders/{{ order_id }}/execute"
+                hx-sync="this:drop" hx-disabled-elt="find button">
+            <input type="hidden" name="intent" value="{{ new_intent() }}">
+            <button type="submit" class="primary">Execute</button>
+            {{ m.working('Reserving funds…') }}
+          </form>
+          <span class="muted">
+            Reserves the source funds and starts the conversion. One attempt — an underfunded
+            source answers <code>INSUFFICIENT_FUNDS</code> and the order stays pending, so you can
+            fund it and press again before the lock expires.
+          </span>
+        {% endif %}
+        {% if can_cancel and not (operation and operation.pending) %}
+          <form hx-post="/orders/{{ order_id }}/cancel"
+                hx-sync="this:drop" hx-disabled-elt="find button">
+            <input type="hidden" name="intent" value="{{ new_intent() }}">
+            <button type="submit" class="danger">Cancel this order</button>
+            {{ m.working() }}
+          </form>
+          <span class="muted">
+            Only while the order is still pending — a cancelled order never executes, and the
+            quoted rate is given up. Converting later means a new quote.
+          </span>
+        {% endif %}
+        {% if not can_execute and not can_cancel and not (operation and operation.pending) %}
+          <span class="muted">
+            {% if terminal %}This order has reached a terminal state.
+            {% else %}No action available in its current state.{% endif %}
+          </span>
+        {% endif %}
+      </p>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% if order %}
+  <h2>Everything Conduit sent</h2>
+  <div class="table-scroll">
+  <table>
+    {% for row in rows %}
+      <tr><th style="width:20rem">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endif %}
+
+{% if operation %}
+  <h2>This console's record</h2>
+  {% include "operations/_panel.html" %}
+{% endif %}
+
+{% if is_sandbox() and can_simulate and order %}
+  <h2>Sandbox</h2>
+  <div class="card">
+    <p class="muted">
+      Sandbox host only — <code>/v2/sandbox</code> does not exist on staging or production, and the
+      route refuses to send there. Settlement of the resulting <code>fiat_conversion</code>
+      transaction is simulated from that transaction's own page.
+    </p>
+    <div class="row">
+      {% for action, description in simulations %}
+        <form hx-post="/orders/{{ order_id }}/simulate"
+              hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+          <input type="hidden" name="action" value="{{ action }}">
+          <button type="submit" title="{{ description }}">Simulate {{ action }}</button>{{ m.working() }}
+        </form>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

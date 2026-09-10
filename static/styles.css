@@ -1,0 +1,2216 @@
+/* Conduit Console — the whole stylesheet.
+   Contract: DESIGN.md, and DESIGN_DIRECTION.md for the imported values.
+   One file, no build step, no preprocessor, no network imports.
+   Tokens first; every rule below consumes them. */
+
+/* ---- The type, read off conduitpay.com --------------------------------------
+   Conduit's own site sets headings in **Founders Grotesk**, body in
+   **DM Sans** and machine values in **JetBrains Mono**
+   (`--font--heading-family` / `--font--body-family` / `--font--mono-family`, in
+   https://cdn.prod.website-files.com/68d0f3d2428d3fc5218fed6a/css/conduit-stage.shared.0bc6f0dd2.css,
+   read 2026-09-02). This console now uses the same three, under DESIGN.md's
+   licensing rule: a face is vendored only if its licence ships beside it.
+
+   DM Sans and JetBrains Mono are OFL, so they are here — one *variable* woff2
+   per family, and **no `unicode-range`**: each file is loaded whole, so the
+   fallback boundary is the file's own cmap rather than a range this stylesheet
+   asserts and could get wrong. That boundary is real and is worth naming:
+   **DM Sans covers Latin and Latin-Extended only** (403 codepoints — no
+   Cyrillic, no Greek, no Vietnamese, no CJK). `input, select, textarea { font:
+   inherit }` below means the onboarding form's inputs are DM Sans, so a name
+   typed in a script DM Sans does not carry renders in the system stack, per
+   glyph. That is the mechanism working — the console's operators are EU/US and
+   the face is the site's — not a gap to paper over, and it is upstream's
+   coverage, not a subsetting decision made here. JetBrains Mono IS subset (see
+   below) and is cut to sit inside that same boundary, so there is one fallback
+   edge on the page rather than two. Both were converted from the upstream
+   variable TTF with fontTools (`uv run --with fonttools --with brotli`);
+   neither upstream ships a variable woff2.
+
+   Provenance (fetched 2026-09-02):
+     DM Sans 4.004   https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans%5Bopsz%2Cwght%5D.ttf
+                     licence: `static/fonts/OFL-dm-sans.txt`, verbatim from
+                     https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/OFL.txt
+     JetBrains Mono 2.304
+                     https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+                     → `fonts/variable/JetBrainsMono[wght].ttf`
+                     licence: `static/fonts/OFL-jetbrains-mono.txt`, the zip's own `OFL.txt`
+                     then SUBSET, because upstream ships Cyrillic, Greek, APL,
+                     box-drawing and the code ligatures and this console sets
+                     nothing in mono but machine values (ids, references,
+                     amounts, ISO codes, timestamps, wire constants) plus the
+                     fourteen punctuation marks the templates emit. 111 KB →
+                     32 KB, one command, reproducible:
+                       uv run --with fonttools --with brotli pyftsubset \
+                         JetBrainsMono[wght].woff2 \
+                         --output-file=fonts/jetbrains-mono.woff2 --flavor=woff2 \
+                         --unicodes=U+0000-024F,U+0300-036F,U+2000-206F,U+20A0-20BF,U+2113,U+2122,U+2190-2199,U+2212,U+2215,U+2248,U+2260-2265,U+2713,U+25CA \
+                         --layout-features=ccmp,locl,mark,mkmk,kern,rlig,tnum \
+                         --name-IDs='*' --name-legacy --name-languages='*'
+                     The dropped layout features are the point as much as the
+                     bytes: JetBrains Mono's `liga`/`calt` draw `->`, `!=`, `--`
+                     as single shapes, and a value an operator compares
+                     character-for-character must never be re-drawn as fewer
+                     characters than it has. `tnum` is kept even though a
+                     monospace has nothing to align — cheap, and it means
+                     `font-variant-numeric` is honoured by both faces.
+                     DM Sans is NOT subset: it is the body face, it takes human
+                     names, and its 88 KB is two variable axes (opsz × wght),
+                     not a charset there is anything to cut.
+
+   **Founders Grotesk is Klim Type Foundry's, and is commercial.** It is NOT in
+   this repo, NOT copied from Conduit's CDN and NOT substituted with a
+   look-alike: the two rules below name files that do not exist yet, so every
+   heading renders in DM Sans until the licence holder drops the real ones in.
+   That is the whole mechanism — the fallback IS the design, and the day the
+   files land nothing in this stylesheet changes. Weights are the site's own
+   (it loads Light 300, Regular 400, Medium 500; this console consumes 400 and
+   500, so those are the two declared). See deploy/README.md § Fonts.
+
+   `font-display: swap` throughout: an operator reads the state of money in the
+   fallback immediately and never waits on chrome. */
+@font-face {
+  font-family: "Founders Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/founders-grotesk-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Founders Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/founders-grotesk-medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("fonts/dm-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono.woff2") format("woff2");
+}
+
+:root {
+  /* Type scale. The FACES are the vendored ones and do
+     not move — Founders Grotesk expected / DM Sans behind it, DM Sans body,
+     JetBrains Mono values — and neither does the 500 weight ceiling. What Arca
+     supplies is the scale: the loudest thing on a page becomes the NUMBER, not
+     the page title, so h1 comes down from 46px to 32px and a summary figure
+     gets a size of its own. */
+  --fs-micro: 0.6875rem; /* 11px — table headers, micro-labels, eyebrows */
+  --fs-xs: 0.75rem;      /* 12px — meta lines, correlation ids */
+  --fs-sm: 0.8125rem;    /* 13px — help text, pills, badges, result-meta */
+  --fs-table: 0.875rem;  /* 14px — table cells. Density survives. */
+  --fs-base: 0.9375rem;  /* 15px — body, forms, nav */
+  --fs-md: 1.0625rem;    /* 17px — h2; h2 is its only consumer */
+  --fs-lg: 2rem;         /* 32px — h1; h1 is its only consumer */
+  /* Summary figures ONLY — never a table cell (§2.3). The stat band is the one
+     consumer today; account balances follow in A4. */
+  --fs-hero: clamp(2.25rem, 4vw, 3rem);  /* 36–48px */
+
+  /* Tracking. `--ls-h2` survives the h2 change with ONE consumer left — the
+     ribbon's brand mark, which is the console's own uppercase display device
+     and is not a heading. h2 itself gives its uppercase up: under Arca
+     **uppercase belongs to mono micro-labels and nothing else** (§9.3), so the
+     eyebrow is now the tier that carries the case. It does NOT gain tracking
+     with the promotion: the mockup writes 0.09em, and conduitpay.com — which
+     was measured off Conduit's own site, which is the thing this console is
+     matching — tracks
+     its mono `.subheading` at 0. A measurement of the real site outranks a
+     figure in a mockup of it, so `--ls-eyebrow` stays 0 (design pass, A1).
+     `--ls-display` is new: h1 and the hero figure. */
+  --ls-h2: 0.04em;
+  --ls-micro: 0.1em;
+  --ls-eyebrow: 0;
+  --ls-display: -0.02em;
+  /* Medium, the heaviest weight Conduit's site loads of its heading face. Arca
+     asks for 600; it is capped here, because the
+     family ships Light/Regular/Medium and a 600 would render synthetically
+     bold the day the licensed files land. `.badge` keeps 700 — that is a
+     DM Sans weight and no heading face is asked for it. */
+  --fw-display: 500;
+
+  /* Founders Grotesk is expected, not shipped (see the @font-face note above):
+     until the licensed files are dropped in, `--font-heading` resolves to
+     DM Sans and headings are set in the body face. */
+  --font-heading: "Founders Grotesk", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Spacing — 4px base, compact density. Unchanged. */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+
+  /* ---- Ground. THREE of them now, not two (§1.2, §2.1). `--page` is the
+     window; `--paper` is what the shell floats on and what text actually sits
+     on. In light they are a step apart; in dark the step IS the depth, which is
+     why the dark shell carries no shadow. A2 landed the shell itself: `body` is
+     the window and `.shell` is the card. ---- */
+  /* Told to the UA as well as painted by us: `color-scheme` is what makes the
+     browser's OWN pixels follow the theme — the date field's picker indicator
+     and its dropped panel, the select's option list, scrollbars, autofill.
+     Without it a dark page keeps light UA chrome and the `<input type="date">`
+     indicator on the ledger's filter bar is drawn in near-black on near-black
+     (design pass, A1). One declaration per theme block, no rule anywhere. */
+  color-scheme: light;
+
+  --page: #f5f5f7;
+  --paper: #ffffff;
+  /* The window colour, deliberately: a tray or a hovered row on the shell is
+     the window showing through it. True since A2 put the shell on `--paper` —
+     the table-head band, the filter tray and the row hover are all one step off
+     the card, and the step they take is the window's own colour. */
+  --surface: #f5f5f7;   /* filter trays, row hover */
+  --surface-2: #eef0f3; /* readonly boxes, avatar fills, inset chrome */
+
+  /* ---- Ink and neutrals. Every ratio below was COMPUTED against the hex on
+     the line, on paper and on the darkest ground the token may legally sit on;
+     the second number is the binding one. `tests/test_contrast.py` recomputes
+     them from this file, so a comment can never outlive its value. ---- */
+  --ink: #0b0e14;         /* 19.32 paper · 16.92 surface-2 */
+  --neutral-700: #475569; /*  7.58 paper ·  6.64 surface-2 */
+  --neutral-600: #5b6472; /*  5.98 paper ·  5.24 surface-2 — BORDERS ONLY, never text */
+  --muted: var(--neutral-700);
+
+  /* ---- Interaction. Blue means "you can act here" and nothing else: with
+     `--processing` dropped (§9.4) no status hue is blue-dominant, so the
+     two-sided rule is restored — accent = you can act, status hue =
+     the state of money. `--link` is a separate token because in DARK the
+     accent is 3.05:1 on surface-2 and cannot be text; here the two are the
+     same colour and no rule has to know the difference. ---- */
+  --accent: #3355ff;       /*  5.41 paper ·  4.74 surface-2 */
+  --accent-ink: #ffffff;   /*  5.41 on the accent fill */
+  /* The pressed step of the accent fill. Not in §9.1 — it is what the deleted
+     `--accent-700` was doing on `button.primary:hover`, and a filled primary
+     with no hover is an affordance that stops answering. One hex for both
+     themes: `--accent-ink` clears AA on it in each (7.32 light · 6.51 dark). */
+  --accent-hover: #2742d9; /*  7.32 under #ffffff · 6.51 under #eef1ff */
+  --link: var(--accent);
+
+  /* ---- Structure. 1px hairlines: the 2px structural rule (`--rule`) is
+     retired with the industrial direction that introduced it, and is deleted
+     rather than left defined. `--divider`/`--divider-soft` go with it (design
+     pass, A1): `--divider-soft` had no consumer left at all, and `--divider`
+     had one, which now names `--line` directly. An alias that survives its
+     reason is the same hazard `--r-pill` was — a name a future rule reaches
+     for without knowing which of the two it is supposed to mean. ---- */
+  --line: #e3e4e8;      /* 1.27 on paper — non-text, structural only */
+  --line-soft: #eef0f3;
+
+  /* ---- Five states, four visual families. The taxonomy is UNTOUCHED — same
+     five states, same strict meanings, same `PILL_TONES` mapping, same
+     "unknown enum renders neutral" rule, same drift pins. Only the hexes moved,
+     and the tints moved toward the ground (§3.2): a treasury team scans a
+     hundred rows, so all five keep a fill and become findable down a column.
+     `--processing` is not here and never was — see §9.4. ---- */
+  --ok:      #0b7a61;    --ok-bg:      #eef7f4;  --ok-line:      #cfe7de; /* 5.29 paper · 4.85 on tint */
+  --warn:    #8a5a00;    --warn-bg:    #fbf5e9;  --warn-line:    #e4d3ae; /* 5.93 paper · 5.46 on tint */
+  --bad:     #b00020;    --bad-bg:     #fdf0f2;  --bad-line:     #edc4cc; /* 7.33 paper · 6.60 on tint */
+  --wait:    var(--ink); --wait-bg:    #eef0f3;  --wait-line:    var(--line); /* 16.92 on tint */
+  --neutral: var(--muted); --neutral-bg: #eef0f3; --neutral-line: var(--line); /* 6.64 on tint */
+
+  /* ---- Radius, decided per component (§3.1) rather than find-replaced.
+     `--r-pill: 999px` is DELETED, not left defined and unused, so no future
+     rule can quietly reach for it — which reverses an earlier decision
+     imported verbatim from DESIGN_DIRECTION.md. ---- */
+  --r-xs: 4px;    /* status pills, env badge */
+  --r-sm: 8px;    /* buttons, inputs, chips, segments */
+  --r-md: 12px;   /* cards, flash, problem */
+  --r-lg: 20px;   /* the shell and the one accent block (A2). Nothing else. */
+  --r-round: 50%; /* avatars, the ribbon count — a count on a dot is the one
+                     place round is the meaning */
+
+  /* The shell's lift (A2's consumer; the token ships with the palette). */
+  --shell-shadow: 0 1px 2px rgb(11 14 20 / .05), 0 14px 32px rgb(11 14 20 / .07);
+  /* Depth by hairline, never by grey fill: the 0-0-0-1px ring IS the border.
+     Re-derived at the new palette — the blur was `color-mix(--ink 6%)`, which
+     on a dark theme would have painted a white glow under every card. */
+  --shadow-1: 0 1px 2px rgb(11 14 20 / .05), 0 0 0 1px var(--line-soft);
+
+  --t-fast: 120ms ease-out;
+}
+
+/* ---- Dark (§1.2, §9.1) ----------------------------------------------------
+   Three grounds, not two: text sits on the shell (`--paper`), not on the window
+   (`--page`). Two selectors carry the SAME values — the system preference,
+   guarded with `:not([data-theme="light"])` so an explicit Light choice wins,
+   and the explicit Dark choice, which wins over a light system preference. The
+   values are duplicated rather than factored: this stylesheet has no
+   shared-block pattern to follow (there is no other multi-selector token
+   block), and the alternatives — a third selector list or a `@media` nested
+   inside `:root` — either break the "explicit wins in both directions" property
+   or add a construct for one use. `tests/test_contrast.py` asserts the two
+   blocks are byte-identical, so the duplication cannot drift.
+
+   `--surface` is `#161b24`, NOT the `#12161e` §9.1 writes (design pass, A1).
+   The spec sets dark `--surface` equal to `--paper`, and `--surface` is this
+   stylesheet's "one step off the current plane" — seventeen rules spend it, and
+   sixteen of them step off `--paper`: the table-head band, the filter tray, the
+   ribbon's active item, `.problem.wait`'s fill, and every hover including the
+   ledger's row hover. Equal to `--paper` they are all no-ops the moment A2 puts
+   the shell on `--paper`, and a treasury operator loses row hover down a
+   hundred-row ledger. The fix is the token, not seventeen rules: `--surface-2`
+   is not available as a substitute because it is byte-identical to `--wait-bg`
+   and `--neutral-bg`, so a row hover painted in it would erase the pending and
+   draft chips it passed under — the exact flattening §3.2 refused. `#161b24`
+   sits between the two: 1.049 off `--paper` and 1.046 off `--surface-2`, which
+   is light's own `--surface-2`-to-`--surface` step (1.049) mirrored, and it is
+   DARKER than `#1a1f29` so the ring constraint below is loosened, not spent
+   (the ring measures 3.19:1 on it). Text on it: ink 15.97 · muted 9.23 ·
+   link 7.45 · ok 8.99 · warn 9.65 · bad 6.29.
+
+   Two constraints, logged with the block:
+     · **No dark surface lighter than `#1a1f29`** may be introduced without
+       re-measuring: the focus ring is at 3.05:1 there, with no margin.
+     · **`--accent` is never a text property in dark.** `--link` exists exactly
+       so no rule has to remember that.
+   The theme CONTROL is the ribbon's three-way System/Light/Dark group (A2):
+   `static/theme.js` keeps the choice in `localStorage` and stamps `data-theme` on
+   `<html>` before first paint. System removes the attribute, which is what
+   hands the decision back to the `@media` branch above. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0b0e14;  --paper: #12161e;  --surface: #161b24;  --surface-2: #1a1f29;
+    --ink: #f5f6f8;         /* 17.86 page · 16.75 shell · 15.27 surface-2 */
+    --neutral-700: #b7bec9; /* 10.32 · 9.68 · 8.82 */
+    --neutral-600: #8791a0; /*  6.06 · 5.68 · 5.18 — borders only, as in light */
+    --accent: #3355ff;      /*  3.57 · 3.35 · 3.05 — FILL and RING only, never text */
+    --accent-ink: #eef1ff;  /*  4.80 on the accent fill */
+    --link: #93a5ff;        /*  8.34 page · 7.82 shell · 7.13 surface-2 */
+    --line: #242a35;  --line-soft: #1a1f29;
+    --ok:   #22d3a6;  --ok-bg:   #0d2a24;  --ok-line:   #1c4a40; /* 10.06 page · 7.96 on tint */
+    --warn: #f2b84b;  --warn-bg: #2a2110;  --warn-line: #4a3a1c; /* 10.79 page · 8.87 on tint */
+    --bad:  #ff6b7d;  --bad-bg:  #2a1116;  --bad-line:  #4a2028; /*  7.04 page · 6.43 on tint */
+    --wait: var(--ink);      --wait-bg: #1a1f29;    --wait-line: var(--line); /* 15.27 on tint */
+    --neutral: var(--muted); --neutral-bg: #1a1f29; --neutral-line: var(--line); /* 8.82 on tint */
+    --shell-shadow: none;
+    --shadow-1: 0 0 0 1px var(--line-soft);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b0e14;  --paper: #12161e;  --surface: #161b24;  --surface-2: #1a1f29;
+  --ink: #f5f6f8;         /* 17.86 page · 16.75 shell · 15.27 surface-2 */
+  --neutral-700: #b7bec9; /* 10.32 · 9.68 · 8.82 */
+  --neutral-600: #8791a0; /*  6.06 · 5.68 · 5.18 — borders only, as in light */
+  --accent: #3355ff;      /*  3.57 · 3.35 · 3.05 — FILL and RING only, never text */
+  --accent-ink: #eef1ff;  /*  4.80 on the accent fill */
+  --link: #93a5ff;        /*  8.34 page · 7.82 shell · 7.13 surface-2 */
+  --line: #242a35;  --line-soft: #1a1f29;
+  --ok:   #22d3a6;  --ok-bg:   #0d2a24;  --ok-line:   #1c4a40; /* 10.06 page · 7.96 on tint */
+  --warn: #f2b84b;  --warn-bg: #2a2110;  --warn-line: #4a3a1c; /* 10.79 page · 8.87 on tint */
+  --bad:  #ff6b7d;  --bad-bg:  #2a1116;  --bad-line:  #4a2028; /*  7.04 page · 6.43 on tint */
+  --wait: var(--ink);      --wait-bg: #1a1f29;    --wait-line: var(--line); /* 15.27 on tint */
+  --neutral: var(--muted); --neutral-bg: #1a1f29; --neutral-line: var(--line); /* 8.82 on tint */
+  --shell-shadow: none;
+  --shadow-1: 0 0 0 1px var(--line-soft);
+}
+
+* { box-sizing: border-box; }
+
+/* conditions.js hides a conditional field with the `hidden` attribute; no
+   display rule in here may outrank it or the form engine leaks fields. */
+[hidden] { display: none !important; }
+
+/* `body` is the WINDOW now, and nothing else (Arca §2.1). It carries `--page`,
+   a margin of window around the card, and no layout of its own: the grid that
+   used to live here moved down one element, to `.shell`, because one element
+   cannot be both the grey window and the white card the app is drawn on.
+
+   The `<script>`s are `display: none` in the UA stylesheet and place no grid
+   items either way; what forced the wrapper is the ground, not the children. */
+body {
+  margin: 0;
+  padding: var(--sp-4);
+  font: var(--fs-base)/1.45 var(--font-ui);
+  color: var(--ink);
+  background: var(--page);
+}
+
+/* The shell: ribbon | content, as a grid, on a rounded card floating on the
+   window. The ribbon spans both rows so the content column keeps its own
+   footer.
+
+   `--r-lg` (20px) is spent here and on one accent block, and nowhere else —
+   that is the whole radius budget (§3.1), and it is what makes the card read as
+   one object rather than as a page with rounded decoration on it. In dark
+   `--shell-shadow` is `none` and the depth is carried by the `--page`/`--paper`
+   step alone, which is DESIGN.md's "depth by hairline, never by grey fill"
+   holding at the scale of the whole app.
+
+   **1180px, down from 1360 (§4.6).** The old cap was `main`'s own `85rem` and
+   it lived on the content column alone; this one is the page, ribbon included,
+   so the content column lands at ~972px. That is the cheap half of the prose-
+   measure fix: the ledes that measured 533px in a 1217px column are now 533px
+   in an 800-ish one, and no rule had to learn a `ch` value to get there.
+   `main`'s own `max-width` is deleted with this — it could never bind again,
+   and a cap that cannot bind is a number a later reader has to disprove.
+
+   **No `overflow: hidden`**, and the mockup's rule is dropped rather than
+   inherited. Measured in the browser, not assumed: `overflow: hidden` makes
+   this element a scroll container, and a scroll container becomes the nearest
+   scrollport for every `position: sticky` descendant. The shell has no height
+   of its own, so that scrollport never scrolls — and both of this console's
+   sticky elements (the ribbon, and the table head that every list page holds
+   still while its rows pass under it) stop moving. The tour's ring and card are
+   `position: fixed` and escape the clip either way, so they were never the
+   argument. Nothing needs the clip: the card's own background is the only
+   painted thing at its corners, and every child is transparent there. */
+.shell {
+  max-width: 73.75rem;  /* 1180px */
+  margin: 0 auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shell-shadow);
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+}
+
+a { color: var(--link); }
+
+/* ONE layer, and the reason it can be one survives the palette change intact.
+   The earlier ring was two, because its `#9fe870` accent was 1.47:1 on paper — it
+   could colour a ring but not *be* one. `--accent #3355ff` measures 5.41 paper
+   / 4.97 page / 4.74 surface-2 in light and 3.57 / 3.35 / 3.05 in dark, so it
+   clears 1.4.11's 3:1 on every ground in both themes and needs no inner band.
+   `outline-offset: 2px` is what makes that true and is deliberately RETAINED
+   (an earlier decision, re-logged rather than silently inherited): it puts the
+   ring on the GROUND rather than on whatever fill the control wears — an
+   accent-filled primary button included, where a ring drawn on the fill would
+   measure 1:1 against it. The dark figure is the binding one: at 3.05:1 on
+   `--surface-2` there is no margin, which is why the token block forbids a dark
+   surface lighter than `#1a1f29` without a re-measurement. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The skip link (QA a11y note). Off-screen until it takes focus, then a real
+   button pinned to the TOP-RIGHT of the viewport — the ribbon puts ~15 links in
+   front of the content, and a keyboard operator was paying for all of them on
+   every navigation. `main` takes `tabindex="-1"` so the jump moves focus as well
+   as the viewport; its own focus ring is suppressed because the target is a
+   whole page region, not a control.
+
+   Restored 2026-09-03 (spec §4.4) exactly as it was removed
+   the day before, with two token substitutions the palette forced: it paints
+   `--ink` on `--paper` in BOTH themes now, which in dark is a near-white plate
+   with near-black text — inverted against the page, which is what an offer
+   pinned over the content should be.
+
+   Two fixes to where it lands (human-reported, 2026-08-31) still hold. It used
+   to focus in at the page's top-LEFT, straight over the ribbon's "Conduit
+   Console" mark — the one piece of chrome that says which console this is,
+   half-covered exactly when a keyboard operator arrives. The corner it now
+   takes is the one corner that is empty at every width: the ribbon's own
+   content (brand, env badge) is left-aligned in the column layout AND in the
+   stack under 60rem, so the top-right cannot collide with it. A full-width bar
+   was the other candidate and was rejected for the same reason as the old
+   position — it covers the mark.
+
+   `fixed`, not `absolute`: the old rule put it at the top of the DOCUMENT, so
+   focusing it halfway down a long ledger scrolled it to a place the operator
+   could not see. Fixed is the viewport, which is where "skip to content" has to
+   appear to be an offer at all — and it is why the link sits OUTSIDE `.shell`
+   in the markup: the shell is the card, this is pinned to the window.
+
+   z-index 40 settles the whole top-layer hierarchy in one place:
+     40  the skip link      — always the frontmost thing on the page
+     30–32  the product tour — scrim, spotlight, card
+     20  the quick-view drawer
+   The skip link sits above the tour deliberately: it is the page's escape hatch
+   and it must never render UNDER an overlay. Reaching it mid-tour is a separate
+   question with a separate answer — the tour traps Tab by design (see app.js),
+   so the way out of the tour is Escape, which every step says in words. */
+.skip {
+  position: fixed;
+  left: -9999px;
+  top: var(--sp-6);
+  z-index: 40;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+}
+/* It is fixed to the VIEWPORT and it has to land on the CARD, and past 1212px
+   those two stop being the same place: the shell is capped at 1180 and centred,
+   so a plain `right: 8px` put the plate out on the grey window — measured at
+   1440, its right edge at 1432 against the card's at 1310, 122px clear of the
+   thing it is an offer about. The offset is therefore the shell's own centring
+   arithmetic — half the leftover window, plus 24px of inset — floored at 24px
+   for every width where the card is full-bleed. 24px clears the 20px corner
+   radius on both axes (a point 8px inside both edges is 17px from the arc's
+   centre), so the plate is inside the card at every width, which is the only
+   way "skip to content" reads as this console's offer rather than the
+   browser's. */
+.skip:focus { left: auto; right: max(var(--sp-6), calc(50vw - 36.875rem + var(--sp-6))); }
+main:focus { outline: none; }
+
+/* ---- Chrome: the left menu ribbon ---------------------------------------- */
+
+/* As requested IA: the horizontal strip became a left
+   ribbon, always expanded. It is an operator's index of the console, not a
+   menu that has to be opened — so there is no toggle, no JS, and every entry
+   is a real link in document order.
+
+   Sticky at the viewport's full height so a long ledger scrolls under it; the
+   2px right rule is the same structural device the header's bottom rule was. */
+nav.ribbon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  position: sticky;
+  /* The window margin, not 0. The shell floats 16px inside the viewport on all
+     four sides; a ribbon pinned at `top: 0` breaks that rhythm the moment the
+     page scrolls — it runs to the very top of the window while the card's own
+     bottom edge stays 16px in, so the one column that is supposed to BE the
+     card's left edge is the only thing touching the glass. Pinned at 16px it
+     spans exactly the card's visible band, and the `height` below is already
+     the matching number. */
+  top: var(--sp-4);
+  align-self: start;
+  /* One viewport MINUS the window margin the shell floats in, MINUS the card's
+     own two hairlines. `100vh` flat would make the ribbon taller than the card
+     that has to contain it — a grid item spanning both rows sizes the rows, so
+     every page would grow past the viewport and carry a scrollbar for nothing,
+     and the 2px of border is enough on its own to do it. */
+  height: calc(100vh - 2 * var(--sp-4) - 2px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+/* The ribbon/content divider is drawn by the CONTENT, not by the ribbon, and
+   that is a fix rather than a preference (measured on the Overview at 1440×900:
+   shell 1338px, ribbon 868px). The ribbon is one viewport tall and sticky — it
+   has to be, or a long ledger scrolls it away — so its own `border-right` stops
+   470px short of the bottom of the card and leaves the divider hanging in mid
+   air. `main` and `footer.site` between them cover the card's full height at
+   every page length, because a grid item spanning both rows sizes those rows
+   and the two of them stretch to fill whichever is taller. Same 1px, same
+   token, drawn by the column that is always as tall as the shell. */
+main { grid-column: 2; grid-row: 1; border-left: 1px solid var(--line); }
+footer.site { grid-column: 2; grid-row: 2; border-left: 1px solid var(--line); }
+
+/* Brand above the environment pill, stacked: the ribbon is 208px wide. The
+   pill's other half used to be a hostname; A2 moved that into its `title`, and
+   the stack survives it — `Sandbox · ceiling 5000` beside a wordmark would
+   still be two identities on one 208px line. */
+.ribbon-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3) var(--sp-6);
+}
+/* The way back to the overview. A small display mark rather than a title: 17px
+   at the display weight, uppercase (DESIGN_DIRECTION "Header").
+
+   Tracking is `--ls-h2`, not the -0.01em it wore until the type design
+   pass. That negative value was Archivo-800 compensation — the same
+   compensation, on the same face, that the phase already stripped off h1 — and
+   it survived here by being one line further up the file. Negative tracking on
+   *uppercase* is backwards twice over: caps are what wants opening up.
+
+   It does NOT get its weight back. Conduit's own wordmark is a drawn lockup
+   (`CONDUIT_LOCKUP_Blue.svg`) whose stems measure ~0.18 of its cap height —
+   bold, and heavier than any weight the site loads of Founders Grotesk
+   (Light 300 / Regular 400 / Medium 500). Asking `--font-heading` for 600 or
+   700 renders fine today, in DM Sans; the day the licensed files land it
+   renders as SYNTHETIC bold, because the family will have no such face — a
+   faked weight, silently, forever. That is precisely the stand-in this phase
+   refuses, arriving by the back door. So the mark is rebuilt from what a
+   lockup actually uses and the two vendored faces really have: caps, tracking,
+   and the console's own display weight. */
+.ribbon .brand {
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;   /* 17px */
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-h2);
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+.spacer { flex: 1; }
+
+/* One entry. 13px, flush left, with a transparent 2px left rule that the
+   active state fills in — the same 2px language as the structural rules, at
+   the scale of a list item. */
+.ribbon .item {
+  display: block;
+  padding: var(--sp-1) var(--sp-3);
+  border-left: 2px solid transparent;
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  color: var(--ink);
+}
+.ribbon .item:hover { background: var(--surface); }
+
+/* The one counted entry (RFIs). Mono, because it is a number this console
+   counted and an operator may compare against Conduit's own — the same rule
+   every other machine value on screen follows. It sits inline after the label
+   rather than pinned to the item's right edge: a float contributes nothing to a
+   block item's width and would print the number over a long label. One margin
+   works at every width — since A2 fixed the collapse, the narrow layout is the
+   same single column as the wide one. No fill and no status hue — an
+   open RFI is a count of work, not a state the money is in (DESIGN.md's usage
+   rule), so it takes the accent's text weight and nothing else. */
+.ribbon .item .count {
+  /* A count here means an operator's action is REQUIRED (today: open RFIs), so
+     it wears the notification-badge idiom — filled `--bad`, not the accent
+     mono it launched with, which read as decoration and was missed (the
+     human's own finding, 2026-09-02). Distinct from the table pills' tone
+     grammar on purpose: a nav badge says "there is work behind this item",
+     a status pill says what one row's state is. */
+  margin-left: var(--sp-2);
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-round);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  /* Knocked out of the fill in the WINDOW ground, not in white: dark mode's
+     `--bad` is `#ff6b7d`, where white measures 2.40:1. `--page` is 6.73:1 on
+     the light red and 7.04:1 on the dark one. */
+  color: var(--page);
+  background: var(--bad);
+}
+.ribbon .item.on {
+  border-left-color: var(--accent);
+  background: var(--surface);
+  color: var(--link);
+  font-weight: 600;
+}
+
+/* A group head names its subs; it never navigates (its own list page is the
+   first sub). Micro-label shape, and it takes the accent with whichever sub is
+   active so the ribbon says where you are at both levels. */
+.ribbon .group { margin-top: var(--sp-4); }
+.ribbon .group-head {
+  margin: 0 0 var(--sp-1);
+  padding: 0 var(--sp-3) 0 calc(var(--sp-3) + 2px);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ribbon .group.on > .group-head { color: var(--link); }
+
+/* The browse/act seam. */
+.ribbon .divider {
+  margin: var(--sp-6) var(--sp-3) var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* 700 is the environment badge's own weight and nothing else wears it. It used
+   to sit *between* body and the headings' 800; put the headings
+   on Conduit's own 400/500 it is the heaviest thing on screen, which is right
+   for the one pill that says which host this console is pointed at.
+   **Outline, never filled** (DESIGN_DIRECTION "Header"): a tinted badge was a
+   second `ok`/`warn` *fill* in the chrome, which the status families are for —
+   the environment is not a state the money is in. A1 finished that thought and
+   took the hue off the sandbox half too; see `.badge.ok` below. No uppercase and
+   no tracking: A2 dropped the hostname from the text, but what is left is a
+   proper noun beside a number an operator may have to read off a support
+   ticket, and neither is easier shouted. */
+.badge {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  border: 1px solid;
+  background: transparent;
+}
+/* Sandbox loses the hue; production keeps it (design pass, A1). `--ok` is the
+   colour of a settled payment, and an operator scanning a ledger reads it that
+   way — parking it permanently in the chrome spends the taxonomy's loudest
+   green on a fact that is not a state of any money, which is exactly what §6's
+   "no status hue for anything that is not that state" forbids. In dark it was
+   also the most saturated thing on screen, out-shouting the one accent-filled
+   action. What the badge has to signal is PRODUCTION, and amber still says it:
+   sandbox's green only ever said "not production", which is the absence of a
+   warning and does not need a colour. Muted at 6.96:1 light / 10.32:1 dark on
+   the window ground, in a `--neutral-600` outline (5.98 / 6.06) — the same
+   full-strength border weight the amber one wears, so only the hue drops. */
+.badge.ok { color: var(--muted); border-color: var(--neutral-600); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+
+/* Who you are, what that lets you do, and how the console decided it. Micro-
+   label shape — the same 11px uppercase the table heads wear — because it is
+   chrome an operator reads once on arrival, not content. `margin-top: auto`
+   drops it to the foot of the ribbon, above a 1px hairline so the ribbon's own
+   2px rule stays the structural edge. */
+.env-strip {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-3) 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The theme control. It sits in the strip but is not one of
+   the strip's lines: everything else here is 11px uppercase tracked micro-type
+   naming a fact an operator reads once on arrival, and this is a control they
+   press. Sentence case with no tracking is what says so — and it is also what
+   makes three segments fit a 208px ribbon, where "SYSTEM LIGHT DARK" tracked at
+   0.1em does not.
+
+   No colour of its own: the unchecked segments inherit the strip's `--muted`,
+   and `.segmented label:has(input:checked)` gives the chosen one `--ink` and
+   the accent edge. The chosen theme is therefore the only word in the strip at
+   full strength, which is the right weight for it — a preference, stated, not
+   an alert. `align-self` keeps the group hugging its three labels instead of
+   stretching down the ribbon's full width. */
+.env-strip .segmented {
+  /* Three times the strip's own 4px line gap, and that ratio is the whole
+     grouping device. The name and the roles are one thing — two facts about
+     who you are, read once on arrival — and the theme is a different thing you
+     press. At the 8px this started on, the control read as a third identity
+     line; at 12px the pair closes and the control is its own group, with no
+     rule, no heading and no box to draw it. */
+  margin-top: var(--sp-3);
+  align-self: flex-start;
+}
+.env-strip .segmented label {
+  padding: 2px var(--sp-2);
+  font-size: var(--fs-micro);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* The content column's own padding. Its `max-width: 85rem` is gone: `.shell`
+   caps the page at 1180 including the 208px ribbon, so an 1360px content
+   column is a number that can no longer be reached. */
+main { padding: var(--sp-4); }
+
+/* Under ~960px the ribbon has nowhere to be as a COLUMN beside the content, so
+   it becomes a full-width band above it — still a single column, still in
+   document order, still every entry (Arca §2.2, option A).
+
+   **This is the collapse fix, and it is a deletion.** The band used to be
+   `flex-direction: row; flex-wrap: wrap`, which put bare `.item` anchors and
+   five-item `.group` columns in one wrapping row as siblings: at 768px the head
+   ACTIONS landed on the same baseline as *Onboard* (which belongs to it) and
+   *RFIs* (which does not), and TRANSACT wrapped away from its own entries. A
+   group head naming the wrong items is worse than no head. Nothing replaces it
+   — the ribbon is already a vertical list of groups, so the fix is to stop
+   turning it on its side, and every rule that existed to prop the row up
+   (`flex-basis: 100%`, the reset margins on the group and the divider) goes
+   with it. Eighteen destinations do make a tall band on a phone; that is the
+   honest shape of this IA, it scrolls, and it hides nothing.
+
+   The mockup's own answer at this width was `.navlinks { display: none }`,
+   which deletes the navigation with no replacement. That is a one-screen design
+   mockup's answer and is explicitly rejected (§2.2). */
+@media (max-width: 60rem) {
+  /* The card goes full-bleed: a 20px radius inside 16px of window costs ~9% of
+     a 375px screen to say "this is a card floating on a page", and a card that
+     covers the whole screen is not floating on anything. The `--paper` ground
+     stays — it is what text sits on — so nothing about the palette changes;
+     what goes is the frame. Measured: the frame was also adding 17px to the
+     one horizontal overflow this console already has (the list tables, wider
+     than a phone before this slice and after it). */
+  body { padding: 0; }
+  .shell {
+    max-width: none;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    box-shadow: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  nav.ribbon {
+    grid-column: 1;
+    grid-row: 1;
+    position: static;
+    height: auto;
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  /* One column: the divider that separated them is now the band's bottom edge,
+     drawn by the ribbon above. */
+  main { grid-column: 1; grid-row: 2; border-left: 0; }
+  footer.site { grid-column: 1; grid-row: 3; border-left: 0; }
+}
+
+/* The page's bottom edge: the console's name, and the one thing it is not.
+   Structural 2px rule like the header's, so the chrome brackets the page. */
+footer.site {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: baseline;
+  margin-top: var(--sp-8);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-xs);
+}
+footer.site .mark {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-display);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-micro);
+}
+footer.site .muted { margin-left: auto; max-width: 70ch; }
+
+/* The display pair, on Conduit's own metrics. A page has one h1 and
+   it is still the loudest thing on it; every h2 is a section marker set as a
+   micro-label at heading size, so a section announces itself by *shape* rather
+   than by size alone. Rows are untouched.
+
+   h1 is the site's h4 step, taken whole: 2.9rem there against 2.875rem here,
+   weight 400, letter-spacing 0, line-height 1. The 800-and-negative-tracking
+   h1 was Archivo's — a heavy face wants tightening and a light one does not,
+   and Founders Grotesk is set on that site at 400 from 25px to 128px without
+   a single tracking adjustment. h2 keeps the console's own uppercase device
+   (the site has no small-heading idiom to copy) but drops to Medium and takes
+   the site's 1.0 leading.
+
+   Line-height is 1.2, not the site's 1 — measured, not preferred. The site's
+   headings never wrap; five of this console's h1s are a customer name, a
+   contact name, a virtual-account holder, an order's customer or a transaction
+   title (`customers/detail`, `contacts/edit`, `accounts/detail`,
+   `orders/detail`, `transactions/detail`), and at 900px a real German company
+   name runs to three lines. Ink clearance between two lines, measured in the
+   browser at 46px DM Sans: an accented cap reaches 41.4px above its baseline
+   and a comma-below/descender 10.9px under the line before it, so
+
+     line-height 1     → 46.0px step → **−6.4px: the lines overlap**
+     line-height 1.1   → 50.6px step → −1.8px, still overlapping
+     line-height 1.15  → 52.9px step → +0.5px, touching
+     line-height 1.2   → 55.2px step → +2.8px  ← this
+
+   1.2 is the first value that actually clears, and the cost is 9px of height
+   on a single-line page head. h2 keeps 1: a 19px uppercase section marker does
+   not wrap on any page in this console. */
+h1 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  letter-spacing: var(--ls-display);
+  line-height: 1.2;
+  /* General guard: an id-shaped title (no spaces to wrap on) still fits a
+     375px viewport instead of pushing the page wide. */
+  overflow-wrap: anywhere;
+}
+h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-display);
+  line-height: 1.25;
+  margin: var(--sp-6) 0 var(--sp-2);
+}
+/* Below the h2 and visibly so. The UA gives h3 1.17em bold — 17.5px against an
+   h2's 19px — which put a field-group title inside a step at almost the size of
+   the section heading above it. Body size at 600 is the level it actually is:
+   the h2's *shape* (uppercase, tracked) is what marks a section, so an h3 needs
+   only to be a label at the top of a block, not a smaller shout. Consumers are
+   the money screens' group titles ("Money", "Recipient", "Bank details", the
+   discovery group names) and the document macro's heading. */
+h3 {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+
+/* ---- Quick actions ------------------------------------------------------- */
+/* The chrome's three verbs, right-aligned above the page head. Its
+   own row rather than the `.page-head .action` slot, which fourteen templates
+   already fill: two `margin-left:auto` clusters on one baseline would put this
+   console's page-level forward action shoulder to shoulder with chrome that is
+   the same everywhere. `flex-wrap` is the narrow-screen answer — under 60rem the
+   ribbon is already a wrapped band above the content and this row wraps under it
+   in turn, so nothing hides and there is no breakpoint of its own to keep. No
+   new tokens: `.btn` is already the shape (`--r-sm`, 18px inline padding).
+
+   The bottom margin is `--sp-6`, not `--sp-4`, and that is the narrow
+   breakpoint's fix (2026-09-02). Under 60rem the ribbon is a band
+   directly above `main`, so the cluster sits between the band's 2px rule and
+   the page eyebrow; at `--sp-4` it was 16px from each and grouped with neither.
+   24px below against `main`'s 16px padding above makes proximity say what the
+   markup says — this belongs to the chrome, not to the page head. */
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-6);
+}
+
+/* Colour on the row, without spending the accent FILL on it. `.btn.primary` is
+   the one forward action of a page — four of them at the top of every page
+   would leave the page's own primary competing with the chrome's, which is the
+   rule `test_the_action_row_is_pills_and_every_href_is_unchanged` defends.
+   So: accent as a RING and a tinted ground, which is exactly what the dark
+   palette permits it to be ("FILL and RING only, never text"), with the ink
+   left as `--ink` so nothing here depends on accent-as-text in either theme. */
+.quick-actions .btn {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.quick-actions .btn:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent-hover);
+}
+
+/* ---- Page head ----------------------------------------------------------- */
+
+/* eyebrow → 46px h1 → one muted sentence, with the page's action pinned to the
+   right of the row (`m.page_head`). The measure keeps the sentence readable at
+   15px while the band and tables below it stay full width. */
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+.page-head > div:first-child { max-width: 62ch; }
+.page-head .action { margin-left: auto; flex: none; }
+.page-head h1 { margin: 0 0 var(--sp-3); }
+.page-head .lede { margin: 0; }
+/* A page whose one honest sentence carries markup — a `<code>` route, a link —
+   cannot pass it through the macro (it would render escaped), so it stays a
+   `<p class="muted lede">` immediately after the head. Same measure, same
+   place: the head simply gives up its bottom margin to it. */
+.page-head:has(+ p.lede) { margin-bottom: var(--sp-2); }
+p.lede { max-width: 62ch; margin: 0 0 var(--sp-6); }
+/* **A LIST page's lede runs wider** (2026-09-02: "the text is
+   crowded on the left when you have plenty of space"). 62ch is the
+   reading measure for prose, and it is right over a form or a record — but over
+   a table it draws a narrow gray column against 600px of empty paper, which
+   reads as a layout that ran out rather than as a measure that was chosen. 88ch
+   still a measure: the rule widens the line, it does not surrender it to the
+   85rem column. The selector is the page's own shape rather than a class on
+   eight templates — a lede with a table among its siblings is a list page, and
+   the same argument covers a detail page that carries one. `:has()` is already
+   load-bearing here (the `+ p.lede` rule above).
+
+   **88ch corrected to 72ch — the prior figure was measured against a
+   content column that does not exist** (fresh-context design pass, on main after the
+   tokens landed). The row that set 88ch computed "content column 1180 − 2×16 padding =
+   1148px" — treating `.shell`'s whole 1180px as the content's own width. It is not:
+   `.shell` is a two-column grid, `13rem (208px) ribbon | minmax(0,1fr) content`, so the
+   ribbon comes out of the 1180 before the content column starts. Measured live in a
+   browser at 1440 (`main.getBoundingClientRect()`): **970px**, not 1148px — and inside
+   `main`'s own `var(--sp-4)` (16px) padding, the usable width a lede can actually take
+   is **938px**. `ch` is still the advance of `0` (10.27px at this 15px body, against
+   6.74px for this console's own prose — the 0.656 ratio the prior row found is correct;
+   only the base it was multiplied against was wrong), so 88ch was never 904px against a
+   79%-full 1148px column. It was 904px against a 938px one: **96%**, four points short
+   of the 85rem column's old 100% and a worse crowding-with-no-margin than the 75% that
+   started this rule, in the opposite direction the "plenty of space on the right"
+   complaint pointed.
+
+   **72ch (739px) is 938 × 0.79 rounded to the nearest whole character** — the
+   same 79%-of-column ratio the 88ch row believed it had reached, now applied
+   to the column that is actually there. It keeps the widening (739px is still
+   +103px / +16% over the 62ch/636px prose measure, wider than the pre-A2
+   533px the original complaint measured) without reading as a line that ran
+   out of column: at 1440 the lede sits inside a visible margin instead of
+   flush against the row of filter fields below it. The two-line-lede argument
+   for exceeding the 45–90ch/line paragraph ceiling is unchanged and still
+   holds at 72ch (109 characters/line, still past 90, still bound by "at most
+   one return" rather than the paragraph ceiling) — only the pixel arithmetic
+   that picked the multiplier moves. Re-measured at 1024: `main` is 782px,
+   interior 750px, and 72ch's 739px reads at 98.5% there — expected and
+   unchanged from 88ch's behaviour at that width, because 1024 was never the
+   width with "plenty of space"; the fix is for 1440. Paragraphs are untouched:
+   `p.lede` and every other block of prose keep 62ch. */
+p.lede:has(~ table) { max-width: 72ch; }
+.page-head:has(~ table) > div:first-child { max-width: 72ch; }
+/* The resource id under the name it belongs to: muted, 13px, and mono via
+   `.num`. It is a fact about the row, not a sentence about the page. */
+.page-head .head-id { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); color: var(--muted); }
+/* Conduit's own eyebrow, verbatim. The site's `.subheading` is
+   JetBrains Mono, uppercase, ~11px, line-height 1, weight 400, letter-spacing
+   0 — the mono face and the uppercase do the work, and it is deliberately not
+   tracked. This was lowercase sans at 0.14em, which was the console inventing
+   an eyebrow rather than using the one it was matching.
+
+   The colour is `--muted` (7.58:1 on paper, 9.68:1 dark), not the accent it
+   wore before. Under Arca blue means "you can act here" and an
+   eyebrow is a *label* — nothing in it navigates — so an accent-coloured one
+   was decoration, which this system's own rule forbids (§9.3).
+
+   Weight 500, not the 400 the site's `.subheading` declares. Read the site's
+   `@font-face` block before its rules: conduitpay.com loads exactly ONE cut of
+   JetBrains Mono, `JetBrainsMono-Medium.woff2` at 500, so every mono
+   declaration on that site — this eyebrow's original included — resolves to
+   Medium regardless of the number written next to it. Copying the number
+   instead of the rendering is how you end up lighter than the thing you are
+   matching; this console vendored the variable file, where 400 is a real 400.
+   See `.num` for the same ruling across the rest of the mono. */
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- Stat band ----------------------------------------------------------- */
+
+/* ---- Hero numerals ------------------------------------------------------- */
+
+/* **One class, and it is the whole of §2.3's split**. The
+   direction's central claim is that on a treasury page the loudest thing on
+   the screen is the *number*, not the page title — h1 came down to 32px in A1
+   so that a figure could be 44 without two things shouting at once.
+
+   The rule that keeps that from becoming noise is a boundary, not a taste:
+   editorial numerals belong to **summaries** — a page's own single figure, or
+   a band of counts — and never to a table cell. A 44px amount repeated down
+   twenty-five ledger rows is not emphasis, it is a wall, and the list rows are
+   what this console exists to scan. So the treatment is a class rather than a
+   descendant selector: which numbers are editorial is now a grep over the
+   rendered pages (`tests/test_web_dashboard.py`), and "absent from every
+   `<td>`" is a thing a test can state.
+
+   `--fw-display` (500) is Medium, the heaviest weight Conduit loads of its
+   heading face, and that is the ceiling: a literal 600 or 700 would come back
+   synthetically emboldened the day the licensed Founders Grotesk files land,
+   which the weight rule forbids. It reads thinner than the 800 this was before
+   A1 — that is the phase working, not a regression, because the stylesheet's
+   own rule is that the darkest thing on the page is the thing you press, and a
+   figure is not pressable.
+
+   `tabular-nums` is not decoration here: it is what lets four counts in a band
+   line up, and what stops a record's amount shifting under an htmx swap. */
+.hero-num {
+  font-family: var(--font-heading);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-display);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* A record's own figure, alone on its line under the head (transaction detail).
+   The band supplies its own spacing; this is for the single-figure case. */
+p.hero-num { margin: 0 0 var(--sp-4); }
+
+/* Four figures between two structural rules, 1px between the cells (the
+   direction's Overview). The figures are the display face, not the mono stack:
+   `--font-mono` is this console's mark for a value an operator copies, compares
+   or reconciles against Conduit, and a count of local rows is none of those —
+   it is a headline. `tabular-nums` still, so the four line up. */
+.stat-band {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: var(--sp-6) 0 var(--sp-8);
+}
+.stat-band > div {
+  border-left: 1px solid var(--line-soft);
+  padding: var(--sp-4) var(--sp-4) var(--sp-6);
+}
+/* The first cell's figure hangs on the page's own left edge; the separators are
+   between cells, not around them. */
+.stat-band > div:first-child { border-left: 0; padding-left: 0; }
+.stat-band .label {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* The type moved to `.hero-num` (see "Hero numerals" below); what
+   is left here is the cell's own layout. The band's figures carry both classes,
+   so a figure is still 44px at `--fw-display` and nothing about it moved. */
+.stat-band .figure { margin: 0; }
+/* A tile that has a truthful destination is a link over the *whole* cell: one
+   tab stop, one target, and the number stays the visual anchor rather than
+   becoming a small blue word. It takes no link colour and no underline — the
+   band is a set of figures, not a list of links — and says it is one by lifting
+   onto the tray tint under the pointer, exactly like a table row. A tile with
+   no honest destination is left as plain text (`app/web/dashboard.py`). */
+.stat-band a {
+  display: block;
+  margin: calc(-1 * var(--sp-2));
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  color: inherit;
+  text-decoration: none;
+}
+.stat-band a:hover { background: var(--surface); }
+
+/* "Accent only where a number wants attention" — and on this console the hue
+   that means *a human is owed something* is the amber, not the accent (which
+   means an affirmative state). Applied by the route to one cell, and only when
+   it is not zero. */
+.stat-band .figure.warn { color: var(--warn); }
+.stat-band .note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+/* Four 44px figures do not fit a phone; two rows of two do. */
+@media (max-width: 52rem) {
+  .stat-band { grid-template-columns: repeat(2, 1fr); }
+  .stat-band > div:nth-child(3) { border-left: 0; padding-left: 0; }
+}
+
+/* ---- Kind tabs ----------------------------------------------------------- */
+
+/* The transactions ledger is one list per `type` (the endpoint requires one), so
+   the four kinds are a tab strip by construction. A flat band between two
+   hairlines. They were a row of `.btn` chips, which said "press me" about a
+   view you are already looking at. Same four anchors, same hrefs.
+
+   The active tab speaks the SAME selection grammar as `.btn.selected` and
+   `.segmented` — the accent lands on the selected element's own edge — and
+   spells it differently because the shape is different (design pass, A1): a
+   chip is a discrete control whose edge is its perimeter, so the accent is its
+   border; a tab is a member of a contiguous band whose edge is the rule it
+   shares with its neighbours, so the accent is a 3px segment lit on that rule.
+   Drawing a chip's perimeter here would put a box inside a band. Both keep the
+   `--surface-2` step as the fill, which is the part that is scannable at a
+   glance; the accent is the part that carries 1.4.11. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: var(--sp-6) 0 var(--sp-4);
+}
+.tabs a {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+.tabs a:hover { background: var(--surface); }
+.tabs a.on {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+/* In a tab the raw value goes under the label rather than beside it — four tabs
+   on one line have no room for eight words. */
+.tabs a .raw { display: block; text-transform: none; }
+
+/* ---- Raw wire values ------------------------------------------------------ */
+
+/* QA F-002: the enum an operator reads in words ("Deposit return") and the
+   constant Conduit speaks (`deposit_return`) are both on screen, in that order.
+   This is the *second* half: mono, small, muted — the same "this is a machine's
+   value" mark `.num` and `<code>` already carry, demoted so the label leads.
+   Never a replacement for the value: every one of these surfaces still submits,
+   links and compares the raw string. */
+.raw {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;   /* the mono layer is Medium throughout — see `.num` */
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+/* ---- Result meta + table footer ------------------------------------------ */
+
+/* The line above the table: what you are looking at, and the way to ask again.
+   The count is the micro-label shape at reading size — 13px/800 uppercase, done
+   in CSS so the markup keeps a readable sentence — and everything qualifying it
+   (the sort, the page size) is muted beside it. */
+.result-meta { margin: var(--sp-4) 0 var(--sp-2); }
+.result-meta .count {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+}
+.result-meta .breakdown { color: var(--muted); font-size: var(--fs-sm); }
+/* Export CSV: a secondary pill beside Refresh, at the footer's pill size so the
+   meta line stays a line rather than growing a button. */
+.result-meta .btn { padding: .25rem .7rem; font-size: var(--fs-sm); }
+
+/* The table's own footer, banded off by the same 2px rule the header wears —
+   because Previous and Next as two bare links under a table are two links
+   nobody finds, observed on the live console. They are pills in
+   a band now, with the rows-per-page control at the other end. */
+.table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  align-items: center;
+  margin: 0 0 var(--sp-6);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.table-foot .pages { display: flex; gap: var(--sp-2); align-items: center; }
+.table-foot .sizes {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-left: auto;
+}
+/* The rows-per-page numbers are a selection, so they wear the selected
+   language rather than the primary fill (DESIGN.md: ink = you can act, accent =
+   this is the one selected). Tighter than a full pill button: they are three
+   numbers, not three sentences. */
+.table-foot .sizes .btn { padding: .25rem .7rem; font-size: var(--fs-sm); }
+.micro-label {
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- Status pills -------------------------------------------------------- */
+
+/* `#save-state > span` is the wizard autosave's *saved* state. The server swaps
+   `<span class="muted">Draft saved 12:34:56</span>` into the span (innerHTML),
+   and the endpoint is not this slice's to change — so the pill look is applied
+   here, by position, rather than by a class the response would have to carry.
+   Id specificity (1,0,1) outranks the `.muted` colour it arrives with. */
+.pill,
+#save-state > span {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-sm);
+  line-height: 1.2;
+  border: 1px solid;
+}
+/* The five states map onto four visual families (DESIGN.md's state table):
+   `ok` green, `warn` amber, `bad` the exception red, and one hueless grey that
+   `wait` and `neutral` share — they are separated by their word's weight of ink
+   (16.92:1 against 6.64:1) rather than by hue, because neither is a state money
+   has *become*. All five keep a fill: §3.2 pulled the tints toward the ground
+   but did not remove them, on the ruling that a chip is findable down a column
+   of a hundred rows in a way coloured text is not.
+
+   What makes it findable is worth being exact about, because the fills alone
+   are 1.03–1.14 against their ground: it is the coloured WORD at 4.85–6.60:1
+   on its own tint, inside a 1px border that draws the chip's shape. The fill's
+   job is only to keep the chip from reading as an outlined button — an
+   affordance — and at that job a 1.09 tint is the same step this console
+   already trusts to separate a filter tray from the page. Verified at 25 rows,
+   both themes (design pass, A1). */
+.pill.ok,
+#save-state > span { color: var(--ok); border-color: var(--ok-line); background: var(--ok-bg); }
+/* The autosave's failure state (static/app.js writes it as this same child).
+   `warn`, not `bad`: nothing is lost and nothing is terminal — the draft is on
+   screen and the next change retries — but it needs a human before they walk
+   away, which is exactly what `warn` means in this system. */
+#save-state > span.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
+.pill.warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-bg); }
+.pill.bad { color: var(--bad); border-color: var(--bad-line); background: var(--bad-bg); }
+.pill.wait { color: var(--wait); border-color: var(--wait-line); background: var(--wait-bg); }
+.pill.muted,
+.pill.unknown { color: var(--neutral); border-color: var(--neutral-line); background: var(--neutral-bg); }
+
+/* ---- Table scroll wrapper ---------------------------- */
+
+/* The pre-existing overflow (A2/A4's finding: `/` 380px, `/customers` 584px,
+   `/transactions` 922px at 375/768 and 1130px at 1024 — never at 1440), fixed
+   once for every list table rather than per page. Every `<table>` in the
+   templates (44 sites, 27 templates, no shared macro to hang it on) is wrapped
+   in `<div class="table-scroll">`, the smallest idiom available since there
+   was no table-rendering macro to add it to once.
+
+   **Measured, not assumed, before writing this rule**: an always-on
+   `.table-scroll { overflow-x: auto }` was tried first in a standalone
+   reduction (a table with a sticky `tr:not(:has(td))` head, wrapped, page
+   scrolled). `position: sticky` sticks to the nearest ancestor that
+   establishes a scroll container — that is the wrapper the moment it gets a
+   non-`visible` overflow, not the viewport — and the wrapper has no height of
+   its own (it is exactly as tall as the table), so it never scrolls
+   internally; the header simply scrolled away with row 0 instead of holding
+   above the viewport. That is a regression on every list this console has,
+   including the desktop widths where nothing was broken before this slice.
+
+   So the wrapper is conditional: it takes `overflow-x: auto` only where a
+   table can outgrow the content column, which is every width up to `.shell`'s
+   own `max-width` (73.75rem) — below that cap the column keeps shrinking with
+   the viewport, so a table clean at 1024px is not clean at 1025px. Above the
+   cap the class is a no-op div and every table keeps the sticky head it has.
+
+   The trade: 1025–1180px gives its sticky heads up too (`overflow-x: auto`
+   computes `overflow-y` to `auto`, and a heightless wrapper is a scrollport
+   that never scrolls). The alternative — a `max-height` here — was declined:
+   it puts inner vertical scrolling on every long table in the console.
+
+   `@media` cannot read a custom property, so the width below is a second copy
+   of `.shell`'s; `tests/test_table_scroll_wrapper.py` keeps the two in step. */
+.table-scroll { }
+@media (max-width: 73.75rem) {
+  .table-scroll { overflow-x: auto; }
+}
+
+/* ---- Tables -------------------------------------------------------------- */
+
+table { border-collapse: collapse; width: 100%; }
+
+th, td {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  font-size: var(--fs-table);
+  line-height: 1.35;
+}
+/* The UA gives <th> 700, which DESIGN.md reserves for the environment badge. */
+th { font-weight: 600; }
+
+/* No template writes <thead>; a header row is one whose cells are all <th>,
+   which also leaves the `<th>label</th><td>value</td>` definition rows alone. */
+tr:not(:has(td)) th {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-micro);
+  color: var(--muted);
+  /* Adjacent cells each paint their own fill, so the band is full-bleed within
+     the table without a rule on <tr> (which `border-collapse` would ignore for
+     a border anyway). Definition rows — `<th>label</th><td>value</td>` — carry a
+     <td>, so `:not(:has(td))` keeps their labels off the band. */
+  background: var(--surface);
+  /* The other structural 2px rule: a table's head is a section boundary, not a
+     row separator, and the hairlines below it are what it is separating. */
+  border-bottom: 1px solid var(--line);
+  /* The `border-bottom` above belongs to the COLLAPSED border grid, which is
+     the table's rather than the cell's, so it scrolls away with the table and
+     leaves the stuck header edgeless mid-scroll. The inset shadow paints the
+     same 2px inside the cell, where it stays. Both are kept: the border is what
+     a non-sticky context (print, `position: sticky` unsupported) still gets. */
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* The header row stays put while its rows scroll under it (
+   decision 3 — reported from the live console: "when I scroll down the list, the
+   column header disappears"). One rule for every list in the console rather
+   than a fix on the page that was reported: every long table has the problem,
+   and a status column nobody can name is a column nobody can read.
+
+   **On the ROW, not on the `<th>`** — measured, not assumed (the browser
+   journey that pins this). A sticky box is constrained to its containing block,
+   and a cell's is its own row: `th { position: sticky }` computes to `sticky`,
+   reports `top: 0`, and moves nothing, because there is nowhere inside a 32px
+   row to move to. The row's containing block is the table, so it sticks for the
+   length of the list, which is the whole point.
+
+   `top: 0` means the nearest scrolling ancestor: the viewport on a list page
+   (the ribbon is a left column, not a top bar) and the drawer's own scrollport
+   for the one table inside it — both right without a second rule. z-index 1
+   puts it over the rows and under every layer in the hierarchy documented at
+   the top-layer note above (20 drawer, 30–32 tour). The opaque fill is on the
+   cells above; a transparent header would let the rows read through it. */
+tr:not(:has(td)) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tr:has(td):hover > * { background: var(--surface); transition: background var(--t-fast); }
+
+/* The exception flag: 3px of `--bad` down the left edge of a row whose status is
+   the terminal-failure family (DESIGN_DIRECTION "Tables"). A row you must not
+   scroll past — rejected, failed, cancelled-as-a-failure, stalled — and the
+   only place the danger colour dresses a whole row rather than a pill. The
+   class is set where the template already knows the tone (`is_exception`, the
+   same PILL_TONES table the row's own pill reads), so the flag and the pill can
+   never disagree. `border-collapse` collapses a `<tr>` border away, so the flag
+   is painted on the row's first cell. */
+tr.exception > *:first-child { border-left: 3px solid var(--bad); }
+
+/* An empty table's one row, in two voices (DESIGN_DIRECTION "Empty states").
+   DESIGN.md has always required a sentence plus the action that fills it; both
+   were one muted line, which read as a footnote on a table that has nothing to
+   footnote. The `.lead` is the fact, at display weight and full ink; the
+   `.detail` is why and what to do about it. The class goes on the `<td>`, so a
+   list page adopting it is one attribute and two `<p>`s. */
+td.empty .lead { margin: 0 0 var(--sp-1); font-weight: var(--fw-display); }
+td.empty .detail { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+
+/* **The next-step sentence is clamped to two lines** (fresh-context design
+   pass). `payments.TRANSACTION_NEXT_STEP` (spec §4.1) put
+   one full sentence — 58 to 67 characters — into the status cell for
+   `pending`/`processing`/`failed`/`cancelled`, unclamped. That is fine at one
+   row. At the shape this console actually ships — a healthy day with 25
+   `pending` rows, the exact density risk DESIGN.md's #1 exists for — the
+   status column has nowhere near 60 characters of width once six other
+   columns and a 1180px page have taken their share: measured live at 1440,
+   the column is ~132px and the sentence wraps to **6 lines**, ballooning a
+   31px row to **137px**; at 1024 the column is ~90px and the same sentence
+   wraps to **9 lines** at **194px**. Twenty-five rows of that is a page an
+   operator cannot scan, which is the one thing this table exists to allow —
+   the opposite of what §4.5 spent the rest of this slice buying back.
+
+   Two lines caps every row at the same ~80px regardless of column width or
+   sentence length, which is what makes 25 of them scannable — a ledger reads
+   by row rhythm, and a rhythm that holds is worth more here than a sentence
+   that never truncates. The full sentence is not lost: `-webkit-line-clamp`
+   is a paint-time truncation, not a DOM one, so the complete text is still in
+   the accessible tree for a screen reader and still readable in full via
+   "Refresh" narrowing to one kind or by opening the transaction. The pill
+   already carries the state; this is supplementary. */
+.next-step {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---- Blocks -------------------------------------------------------------- */
+
+/* Content cards. Borderless on purpose: `--shadow-1`'s `0 0 0 1px` ring is the
+   hairline, and the 1px blur under it is the only depth on the page. */
+.card {
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+
+/* A tool tray, not content: same geometry as `.card`, but tinted and flat so a
+   filter bar reads as chrome you operate rather than a record you read. A real
+   1px border rather than the `0 0 0 1px` ring it used to wear
+   (DESIGN_DIRECTION "Filter trays": surface bg, 1px border) — the ring was a
+   shadow, so it painted over whatever the tray sat next to instead of being an
+   edge the layout accounts for. */
+.bar {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin: var(--sp-3) 0;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+
+/* A tray field is a micro-label over its control, not a word in front of it: at
+   five or six filters the inline form was one long sentence of labels and boxes
+   with no way to see where a field began. Direct children only — the `.segmented`
+   and `.pill-group` controls nest their own labels, and those are the choice
+   itself rather than a field name. */
+.bar > label, .bar > form > label, #route-row label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* `input, select, textarea { font: inherit }` would hand the control the
+   label's 11px uppercase micro type; the control is a control. */
+.bar > label > input, .bar > label > select,
+.bar > form > label > input, .bar > form > label > select,
+#route-row label > input, #route-row label > select {
+  font-size: var(--fs-base);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+/* A tray field's control sizes to its own content —
+   nowrap `<select>` text especially, `batches/new`'s "Funded from" with a
+   disabled option's " — not on {rail}" suffix ran to 425px alone — and
+   `.row`'s `flex-wrap: wrap` only wraps whichever fields do not individually
+   fit, so a single wide control still overflows 375px on its own line. One
+   rule, every `.bar` tray (the same single-column idiom A2 gave the ribbon,
+   applied to the tray fields rather than the ribbon groups): below 400px each
+   field is full width, and so is its control. */
+@media (max-width: 25rem) {
+  .bar > label, .bar > form > label, #route-row label {
+    width: 100%;
+  }
+  .bar > label > input, .bar > label > select,
+  .bar > form > label > input, .bar > form > label > select,
+  #route-row label > input, #route-row label > select {
+    width: 100%;
+  }
+}
+/* The secondary half of the tray's pair: Filter applies, Reset is the URL with
+   nothing on it. Borderless so it cannot be mistaken for the primary action —
+   it is the "never mind" of the tray. */
+/* `size="52"` on payouts/contact.html's #contact forced
+   ~415px regardless of viewport (a design-pass ruling for the
+   datalist popup's width) — overflowing 375px. The label grows to fill the
+   tray's own row instead, and the input fills the label; `min-width: 0` lets
+   the flex item shrink below its content size rather than push the row wide. */
+label[for="contact"] { flex: 1 1 auto; min-width: 0; }
+#contact { width: 100%; }
+
+.bar .btn.reset {
+  border-color: transparent;
+  background: transparent;
+  font-weight: 500;
+  color: var(--link);
+}
+.bar .btn.reset:hover { background: var(--paper); border-color: var(--line); }
+
+/* The payout route row: one tray, two lines. Line one is
+   WHO — the customer control, which re-renders the page for a different reason
+   than the route controls (it changes which accounts and whitelist are read) —
+   and line two is the route. The break is a line, not a divider, because the
+   two still travel in one GET; and the row's labels take the tray micro-label
+   voice above (`#route-row label` rides the `.bar > label` rules — BOTH pages
+   that carry the id: the single payment's row and the batch corridor row,
+   because a tray field is a micro-label wherever the tray is), since at five
+   and six controls the inline form was exactly the label-noise that ruling
+   names. `.stack` gates the two-line layout to the form that has a WHO line;
+   the batch corridor row has no customer control and keeps its single line.
+   `flex-end` so the button lines up with the controls under their labels. */
+#route-row.stack { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+#route-row.stack .row { align-items: flex-end; }
+
+.flash {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  margin: var(--sp-2) 0;
+}
+.flash.msg { background: var(--ok-bg); border: 1px solid var(--ok); }
+.flash.err { background: var(--bad-bg); border: 1px solid var(--bad); }
+
+.problem {
+  border: 1px solid var(--bad);
+  border-left-width: 4px;
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  margin: var(--sp-3) 0;
+  background: var(--bad-bg);
+}
+.problem .meta { color: var(--muted); font-size: var(--fs-xs); }
+/* Same box, a different state. A route that *requires* a whitelisted recipient
+   or a document has not failed — it is telling you what it still needs — so it
+   wears `wait`/`warn` rather than the terminal red. Replaces three (four with
+   the RFI notice) inline `style="border-color:…"` overrides. */
+/* It takes the TRAY tint rather than `--wait-bg`, and still does under Arca now
+   that `wait` has a fill of its own (§3.2): a stated precondition is chrome
+   telling you what is still owed, not a state the money is in, and `--wait-bg`
+   at box size would be a pill blown up to a paragraph. */
+.problem.wait { border-color: var(--wait-line); background: var(--surface); }
+.problem.warn { border-color: var(--warn-line); background: var(--warn-bg); }
+
+/* A reviewer's own sentence on a rejected application (`failureMessage`). Set
+   as a quotation because that is what it is: prose this console did not write
+   and must not paraphrase, usually the only place the offending field is named.
+   The rule takes the box's own family — exception red by default, amber inside
+   a warn-tinted (resubmittable) rejection — so status, reason and affordance
+   are one block of colour rather than three. */
+.problem .reason {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--bad);
+  font-style: italic;
+}
+.problem.warn .reason { border-left-color: var(--warn-line); }
+
+/* An optional attachment, out of the way until it is wanted.
+   Native <details>: no JS, no state to keep in step with anything, and the
+   browser's own disclosure semantics for a screen reader. Secondary by
+   construction — the tinted tray fill of `.bar` rather than a card's paper, and
+   a summary at label weight rather than a heading, because it is not one of the
+   numbered steps. */
+details.attach {
+  background-color: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px var(--line-soft);
+  padding: var(--sp-2) var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+details.attach > summary {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: var(--fs-base);
+}
+/* No focus rule of its own: a <summary> is focusable, so the global two-layer
+   `:focus-visible` already dresses it. */
+details.attach[open] > summary { margin-bottom: var(--sp-2); }
+
+/* **The demoted teaching prose** (spec §4.5). The same
+   native `<details>` idiom as `.attach`, with no tray fill: this sits directly
+   under a filter bar that already has one, and two stacked trays would read as
+   a second control. Quiet by construction — the summary is a muted sentence at
+   the label size, not a heading — because the thing an operator came for is
+   the table, and this is the answer to a question they asked once.
+
+   The measure is the list-page lede's own — 72ch as of the fresh-context
+   design pass that corrected it (see `p.lede:has(~ table)`
+   above), not prose's 62: it opens over a table, in the same column as the
+   lede, and two different measures on one page's two sentences would read as
+   an accident. */
+details.teaching {
+  margin: 0 0 var(--sp-5);
+  max-width: 72ch;
+}
+/* The block takes the list lede's 72ch so the summary starts and ends on the
+   same measure as the sentence above it. What is INSIDE it does not: the moved
+   copy is paragraphs, and a paragraph gets the prose measure — the line-return
+   ceiling a two-line lede escapes is exactly what binds a four-line one (the
+   arithmetic is beside `p.lede:has(~ table)`). */
+details.teaching p { max-width: 62ch; }
+details.teaching > summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+details.teaching > summary:hover { color: var(--ink); }
+details.teaching[open] > summary { margin-bottom: var(--sp-2); }
+details.teaching p { margin: 0 0 var(--sp-2); }
+details.teaching p:last-child { margin-bottom: 0; }
+
+/* ---- Linear-form steps --------------------------------------------------- */
+
+/* The step marker: mono, muted, the same family every machine-facing value on
+   this console is set in. It numbers the step; it is not a status. */
+.step-n {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--muted);
+  margin-right: var(--sp-2);
+}
+
+/* A settled step: one line, the same card the expanded step lived in, tighter.
+   The chip inside it is a `.btn.selected` <span>, so it inherits the accent fill
+   from Controls below and needs nothing here. */
+.step-summary { padding: var(--sp-2) var(--sp-3); }
+.step-summary .row { margin: 0; }
+/* Selection, not action: the chip cannot be pressed, so it must not feel like
+   it can. `.btn` sets a pointer cursor for the anchors and buttons it normally
+   dresses. */
+.step-summary .btn { cursor: default; }
+
+.chip {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-3);
+  margin: 0 var(--sp-1) var(--sp-1) 0;
+  font-size: var(--fs-sm);
+}
+
+.row { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+
+.muted { color: var(--muted); }
+
+/* Money and bank coordinates: digits line up column-wise, so a wrong one is
+   visible rather than merely present.
+
+   Weight 500 — the whole mono layer is Medium, for the reason set out on
+   `.eyebrow`: Conduit ships JetBrains Mono in one cut, Medium, so everything
+   mono on its site renders Medium whatever weight the rule names. It costs
+   nothing to match: JetBrains Mono's advance is fixed across the `wght` axis
+   (`cus_034Abbx1XrOVaY6sXUBtGT` measures 218.3998px at 14px on 400, 500 and
+   600 alike), so not one column on the ledger moves. `th.num` keeps 600 — that
+   is the table-header weight, which every header wears, not a mono decision. */
+.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-weight: 500; }
+/* `<code>` is named in DESIGN.md's Typography as carrying the same mark as
+   `.num`, and it accidentally did once: `--font-mono` was
+   `ui-monospace, "SF Mono", …`, which is what a bare `code` gets from the UA
+   anyway. Naming a real face made the two diverge — half the machine values on
+   /payouts/new in JetBrains Mono and half in the browser's default — so the
+   family it was always documented to have is now actually set. */
+code { font-family: var(--font-mono); font-weight: 500; font-size: 0.85em; overflow-wrap: anywhere; }
+/* An amount that wraps mid-number is an amount read wrong; `time` already
+   nowraps, so this brings the rest of the machine columns in line. */
+th.num, td.num { text-align: right; white-space: nowrap; }
+/* `--surface` is now what a *live* control wears at rest, so a readonly box
+   drops to `--surface-2` to stay legibly not-editable (16.92:1 for ink). */
+td .num[readonly] {
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+
+/* Every timestamp on screen comes out of the `ts` filter as a <time>. Wrapping
+   one costs a row of column alignment, which is the only reason the column is
+   compact-formatted in the first place. */
+time { white-space: nowrap; }
+
+/* ---- Forms --------------------------------------------------------------- */
+
+/* Form controls do not inherit the body font; filter bars live outside .field. */
+input, select, textarea { font: inherit; }
+
+/* Every dropdown draws its own chevron, so a <select> is visibly a dropdown
+   before it is clicked. `appearance: none` takes the UA's box away with the
+   UA's arrow, so this rule has to hand the whole control back — border, radius,
+   padding, fill — for the selects that live in cards rather than in a `.field`.
+   The chevron is an inline data-URI (no file, no request); `--muted` cannot be
+   interpolated into a url(), so the muted hex is the one value duplicated in
+   here — `%23475569` light, and `%23b7bec9` restated per theme at the foot of
+   this rule, because a `var()` cannot reach inside a `url()` and a slate
+   chevron on a near-black field is invisible. This is the one place dark mode
+   costs a duplicated RULE rather than a duplicated token.
+   Multi-selects keep the UA's list box: there is nothing to drop down. No
+   template renders one any more (the orders status filter was the last, now
+   `.pill-group`), but the exclusion stays — it costs nothing and it is what
+   keeps a future multi-select from being painted as a dropdown it is not. */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: .35rem .55rem;
+  padding-right: var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-2) center;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+
+/* The chevron's dark half — the same rule under each of the two dark branches
+   the token block declares, carrying `--muted`'s dark hex `#b7bec9`. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) select:not([multiple]) {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b7bec9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] select:not([multiple]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b7bec9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Filter-bar controls sit outside `.field`, so they get the treatment here:
+   the same hairline box, one notch tighter than a form field because a bar is
+   one line of chrome, not a column of inputs. */
+.bar input {
+  padding: .35rem .55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--surface);
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+/* The field lights up under the caret: tinted at rest, paper while you type. */
+.bar input:focus, select:not([multiple]):focus { background-color: var(--paper); }
+
+.field { margin: var(--sp-3) 0; max-width: 34rem; }
+.field label { display: block; font-weight: 500; }
+/* Help text is 13px muted at a reading measure WHEREVER it is — the size and
+   role the scale has assigned it ("`--fs-sm` … help text"). The
+   only consumer used to be `.field .help`, so a help sentence outside a field
+   fell through to body prose at the content column's full width: on the payout
+   page the resend notes rendered darker, larger and 130ch wide
+   directly under a 62ch muted lede, which put the annotation above the sentence
+   it annotates. The measure is the lede's 62ch plus the two characters 13px
+   buys back over 15px, so a help line and a lede line are the same length of
+   paper. `p.help` also stacks tighter than a paragraph's 1em so a run of them
+   reads as one annotation with one owner rather than as page copy. */
+.help { color: var(--muted); font-size: var(--fs-sm); max-width: 70ch; }
+p.help { margin: var(--sp-2) 0; }
+.field .err { color: var(--bad); font-size: var(--fs-sm); }
+.field input[type=text], .field input[type=email], .field input[type=url], .field input[type=tel],
+.field input[type=date], .field input[type=number], .field select, .field textarea {
+  width: 100%;
+  padding: .5rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--surface);
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+/* Taller than a bar control, but the chevron still needs its lane. */
+.field select { padding-right: var(--sp-6); }
+/* `:focus`, not `:focus-visible`: a <select> does not reliably match the latter
+   after a click, and a control the operator is typing money into always says
+   so. `outline-offset: 0` so the ring sits *on* the border it recolours —
+   one 3px accent edge rather than a ring floating off the field. */
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--accent);
+  background-color: var(--paper);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.field.choices label { font-weight: 400; display: block; }
+
+/* ---- Onboarding wizard: section nav + grouping --------------------------- */
+
+/* One column on narrow viewports, where the nav is simply the list of what is
+   coming; two from 60rem up, where it can stay put while the form scrolls. */
+.wizard-layout { display: grid; gap: var(--sp-6); align-items: start; }
+
+@media (min-width: 60rem) {
+  .wizard-layout { grid-template-columns: 15rem minmax(0, 1fr); }
+  #wizard-nav {
+    position: sticky;
+    top: var(--sp-4);
+    max-height: calc(100vh - var(--sp-8));
+    overflow: auto;
+  }
+}
+
+#wizard-nav ol { list-style: none; margin: 0; padding: 0; }
+#wizard-nav li { margin-bottom: 1px; }
+#wizard-nav a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid var(--line-soft);
+  text-decoration: none;
+  color: var(--ink);
+}
+#wizard-nav a:hover { background: var(--surface); }
+#wizard-nav a.current {
+  border-left-color: var(--accent);
+  background: var(--surface);
+  font-weight: 500;
+}
+/* Counts are chrome, never a status hue: a finished section goes quiet (a muted
+   check), it does not turn green — green means money settled. */
+#wizard-nav .count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  font-weight: 500;   /* the mono layer is Medium throughout — see `.num` */
+  color: var(--muted);
+}
+#wizard-nav .total {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* The autosave line sits at the top of the form, above the first section. */
+.save-status { margin: 0 0 var(--sp-6); font-size: var(--fs-sm); }
+
+#wizard-nav .micro-label { margin: 0 0 var(--sp-2); padding-left: var(--sp-2); }
+#wizard-nav .nav-submit {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.form-section { margin: 0 0 var(--sp-6); scroll-margin-top: var(--sp-4); }
+.form-section > h2 {
+  margin-top: 0;
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Progressive disclosure (QA F-001): one step on screen. A class — never the
+   `hidden` attribute, which is conditions.js's per-field channel and would put
+   two layers on one switch. static/app.js also sets `inert` + `aria-hidden`
+   here, so a hidden step is out of the tab order and out of the a11y tree while
+   staying in the DOM, enabled, and part of every submission. */
+.form-section.step-off { display: none; }
+/* The step is focused on every change so the keyboard follows the eye; the
+   heading and the nav's `aria-current` already say where you are, so the ring
+   on the container itself would be noise. */
+.form-section:focus { outline: none; }
+
+.step-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-soft);
+}
+.step-foot .next, .step-foot #wizard-submit { margin-left: auto; }
+.step-foot > .row { margin: 0; }
+
+/* The filter over a long checkbox group (QA F-001). Display only: it hides
+   labels, never boxes, and never a ticked one. */
+/* A group long enough to earn a filter is long enough to be a scroll of its own
+   rather than eight thousand pixels of step (QA F-001's actual measurement).
+   Keyed off the filter's presence, so a short group is untouched — and the
+   filter stays put at the top of the box it filters. */
+.field.choices:has(.choice-filter) {
+  max-height: 26rem;
+  overflow-y: auto;
+  /* A cut-off list needs an edge, or the last visible row reads as the last row. */
+  border: 1px solid var(--line-soft);
+  padding: var(--sp-2) var(--sp-3);
+}
+.choice-filter {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
+  padding: var(--sp-1) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.choice-filter-input { flex: 1 1 18rem; min-width: 0; }
+.field.choices label.filtered-out { display: none; }
+
+/* ---- Controls ------------------------------------------------------------ */
+
+button, .btn {
+  font: inherit;
+  font-weight: 600;
+  padding: .45rem 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--ink);
+  display: inline-block;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+button:hover, .btn:hover { background: var(--surface); border-color: var(--muted); }
+/* The forward action is the ACCENT FILL again — a restoration, not a new
+   invention (§9.5). The original rule was two-sided (accent = you can act, status
+   hue = the state of money); the imported direction collapsed it,
+   because its accent green *was* the ok-status green, so action had to move off
+   colour entirely and the button went ink-filled. Arca removes the collision:
+   the accent is blue, `--processing` is dropped (§9.4), and no remaining status
+   hue is blue-dominant — ok green, warn amber, bad red, wait and neutral
+   hueless. So blue is free to mean one thing. One primary per page, unchanged.
+   `.btn.primary` too: the selected filter chips are anchors, not buttons. */
+button.primary, .btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+button.primary:hover, .btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+/* Selection is not action — and under Arca that distinction has to be carried
+   by something other than the accent fill, because the accent fill is now what
+   the forward action wears. So a selected control steps to `--surface-2` and
+   takes an ACCENT EDGE: the fill says "this one", the edge is what a keyboard
+   or low-vision operator reads it by. The accent-200/900 pair that said it
+   before was the deleted ramp's, and its fill was 1.29:1 on paper — never the
+   indicator. Measured: the edge is 4.74:1 on `--surface-2` light and 3.05:1
+   dark, which is 1.4.11's 3:1 with the margin the constraint note names; the
+   text on the fill is 16.92:1 light and 15.27:1 dark. */
+.btn.selected, button.selected {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+/* Only the ones you can press. A settled step's chip is a `<span class="btn
+   selected">` — inert — and `.btn.selected:hover` (0,3,0) outranked the
+   `.step-summary .btn { cursor: default }` intent by repainting its border
+   under the pointer, which is an affordance the span does not have. */
+a.btn.selected:hover, button.selected:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+/* Destructive: outlined, never filled. Colour on this console means state, and
+   a button is an affordance rather than a state — so the hue warns without
+   claiming the row has already gone wrong (DESIGN.md Decisions Log). */
+button.danger, .btn.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: var(--paper);
+}
+button.danger:hover, .btn.danger:hover { background: var(--bad-bg); border-color: var(--bad); }
+button[disabled] { cursor: default; opacity: 0.6; }
+
+/* ---- Segmented toggles --------------------------------------------------- */
+
+/* A binary (or few-way) choice as one connected control instead of a column of
+   radio dots. CSS only — the inputs stay **real** `<input type=radio|checkbox>`
+   elements with their original `name`s and `value`s, so the form posts exactly
+   what it posted before and `conditions.js` / `app.js` keep reading `.checked`
+   and receiving `change`. Only the input's *box* is hidden. */
+.segmented { display: inline-flex; vertical-align: middle; }
+/* A two-way segment with a long second label (rfis'
+   "Include resolved and cancelled") does not fit 375px on one line, and
+   nowrap kept it from ever trying. Letting it wrap keeps every segment intact
+   — no mid-word break, unlike `.segmented label`'s own `white-space: nowrap`,
+   which is untouched. */
+@media (max-width: 25rem) {
+  .segmented { flex-wrap: wrap; }
+}
+.segmented label {
+  position: relative;   /* the containing block for the input hidden inside it */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: .35rem .9rem;
+  border: 1px solid var(--line);
+  border-left-width: 0;
+  /* `--paper`, not `--surface`: rest on paper · hover to `--surface` · selected
+     to `--surface-2` with an accent edge is the one selection grammar, and the
+     three components that speak it (`.btn.selected`, `.segmented`,
+     `.pill-group`) now start from the same place (design pass, A1). Resting on
+     `--surface` cost this control its hover, which had to jump to `--surface-2`
+     and landed on the SELECTED fill — a hovered segment and a chosen one
+     differed by one pixel of border. */
+  background-color: var(--paper);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+.segmented label:first-child {
+  border-left-width: 1px;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+}
+.segmented label:last-child { border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+/* `.field.choices label` is (0,2,1) and stacks these vertically; the segments
+   are one row, so it needs beating rather than out-ordering. */
+.field.choices .segmented label { display: inline-flex; }
+.segmented label:hover { background-color: var(--surface); }
+/* Hidden, never *removed*: `display:none` / `visibility:hidden` would take the
+   input out of the tab order and out of the browser's constraint-validation
+   focus path. A 1px, transparent, still-rendered control keeps both. */
+.segmented input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+/* Selection, not action — the same surface step and accent edge a selected
+   filter chip wears (see `.btn.selected`). */
+.segmented label:has(input:checked) {
+  background-color: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* The ring is drawn on the segment because the input it belongs to is 1px. Same
+   single accent layer as `:focus-visible` everywhere else. */
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+/* ---- Choice pills -------------------------------------------------------- */
+
+/* The MULTI-choice half of the same grammar: a row of *spaced* pills, one per
+   value, any number of them on. Deliberately not `.segmented` — connected
+   segments are one decision with one answer, and reading a multi-select as a
+   single choice is exactly the misread this pattern exists to prevent. The
+   machinery is the toggle's: real `<input type=checkbox>` elements keeping
+   their `name`/`value`/`checked`, hidden only in their *box* (1px, transparent,
+   still rendered — never `display:none`, which would take them out of the tab
+   order), accent fill when checked, ring drawn on the pill via `:has()`. Paper
+   at rest rather than `--surface`, because these sit inside a `.bar` that is
+   already `--surface`. */
+.pill-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  vertical-align: middle;
+}
+.pill-group label {
+  position: relative;   /* the containing block for the input hidden inside it */
+  display: inline-flex;
+  align-items: center;
+  padding: .35rem .9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--paper);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+.pill-group label:hover { background-color: var(--surface); }
+/* Hidden, never *removed* — see `.segmented input`; the same rule for the same
+   reason, and pinned by its own test. */
+.pill-group input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+/* Selection, not action — the trio `.btn.selected` and `.segmented` wear. */
+.pill-group label:has(input:checked) {
+  background-color: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.pill-group label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+/* ---- Quick-view drawer --------------------------------------------------- */
+
+/* DESIGN_DIRECTION "Detail drawer": right-fixed 440px panel, 2px left rule,
+   label/value rows with a 110px uppercase micro-label column.
+
+   `position: fixed` is the whole no-layout-shift mechanism — the drawer slides
+   over the table rather than taking a column from it, so the list underneath
+   does not reflow when one opens and the row an operator was reading stays
+   where they left it. Above the ribbon (z-index 10) because
+   it is the thing in front; the ribbon is `sticky` with no z-index of its own.
+
+   Scoped by id rather than by class: there is exactly one of these on exactly
+   one page, and a `.drawer` class would advertise a pattern the console does
+   not yet have a second use for. */
+#drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 20;
+  width: 440px;
+  max-width: 100vw;
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  background: var(--paper);
+  border-left: 1px solid var(--line);
+}
+/* Absent, not merely blank. Two states put it on screen: a body that has been
+   swapped in, and a request in flight (htmx puts `htmx-request` here via each
+   button's `hx-indicator`), which is what makes the indicator inside the shell
+   visible while the body is still empty. `:has()` is already load-bearing in
+   here for `.segmented` and the table header band — same stated constraint. */
+#drawer:not(.htmx-request):has(#drawer-body:empty) { display: none; }
+/* The panel is the focus target on open; a region is not a control, so it takes
+   no ring of its own. */
+#drawer:focus { outline: none; }
+
+/* The shell's own strip: what this panel is, whether it is loading, and the one
+   way out. It stays while the body under it is swapped. */
+.drawer-chrome {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.drawer-chrome .btn { margin-left: auto; padding: .25rem .7rem; font-size: var(--fs-sm); }
+
+.drawer-top { padding: var(--sp-3) 0; }
+.drawer-top .eyebrow, .drawer-top .head-id { margin: 0; }
+
+/* The direction's micro-label column. The markup is the console's ordinary
+   definition row (`<th>` label, `<td>` value), so this is a look, not a second
+   pattern to learn. */
+#drawer table th {
+  width: 110px;
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--ls-micro);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+#drawer table td { font-size: var(--fs-base); }
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+/* The row's own affordance: a quiet pill beside the id, at the footer's pill
+   size so it does not out-shout the link that opens the record. It sits in the
+   first cell on purpose — a right-fixed panel covers the far end of a
+   full-width table, and an action column there would be unclickable exactly
+   when a second row wants previewing. */
+.btn.quick { padding: .25rem .7rem; font-size: var(--fs-sm); font-weight: 500; }
+
+/* ---- Product tour --------------------------------------------- */
+
+/* An INVITED MODAL, and the one place this console departs from the drawer's
+   non-modal grammar. The distinction is who asked: a quick view is a glance at
+   a row while the list stays live behind it, so it traps nothing; the tour is a
+   mode an operator explicitly entered, and a Tab that wandered out of it into
+   the page it is pointing at would leave them lost inside their own lesson.
+   ESC always exits, and the card says so.
+   The trap is FOCUS-ONLY: nothing is `inert` or `aria-hidden`, so a screen
+   reader's virtual cursor can still read the page the card is describing —
+   which is the whole point of the tour.
+   Three elements, built by app.js and only while the tour runs:
+     #tour-scrim  transparent, full-viewport, swallows stray clicks so a
+                  background click cannot pull focus out of the trap;
+     #tour-spot   the spotlight — one box, positioned over the step's target.
+                  The dim is its own `box-shadow` spread (everything OUTSIDE the
+                  ring), so overlay and ring are one element and cannot drift
+                  apart; the ring itself is the page's `:focus-visible` accent,
+                  the same 2px/2px offset every control wears;
+     #tour-card   the step. */
+#tour-scrim { position: fixed; inset: 0; z-index: 30; }
+#tour-spot {
+  position: fixed;
+  z-index: 31;
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  /* A literal, not `--ink`: a scrim darkens in both themes, and `--ink` is
+     near-white in dark, which would have flashed the page white. The hex is
+     the dark window ground. */
+  box-shadow: 0 0 0 9999px rgb(11 14 20 / .55);
+  pointer-events: none;
+}
+/* A step whose subject lives on another page dims the screen and rings nothing:
+   the card carries a static explainer and a way to go see it. Spotlighting some
+   nearby innocent element instead would be the console pointing at a lie. */
+#tour-spot.no-target { outline: none; }
+#tour-card {
+  position: fixed;
+  z-index: 32;
+  width: min(26rem, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-4);
+  background: var(--paper);
+  /* The structural 2px rule, as the drawer wears it — not a drop shadow: depth
+     in here is a hairline, never a grey fill. */
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+/* The card is the focus target on every step; a region is not a control, so it
+   takes no ring of its own (`main:focus` and `#drawer:focus`, same rule). */
+#tour-card:focus { outline: none; }
+#tour-card h2 { margin-top: 0; }
+#tour-card p { margin: 0 0 var(--sp-3); }
+.tour-foot { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.tour-foot .exit { margin-left: auto; font-size: var(--fs-xs); }
+/* The permanent re-trigger, at the foot of the ribbon under the env strip. */
+.ribbon .item.tour { margin-top: var(--sp-2); font-size: var(--fs-sm); }
+
+/* ---- Motion -------------------------------------------------------------- */
+
+/* htmx in-flight: the source control dims and says so with the cursor. */
+.htmx-request { opacity: 0.6; cursor: progress; }
+
+/* Where the wait is long enough to be doubted — a quote fetch, a submission
+   that talks to Conduit — the dim is joined by a word. htmx's own mechanism:
+   the class lands on the requesting element (or on whatever `hx-indicator`
+   names), and the indicator is a plain muted span. No spinner, no animation. */
+.htmx-indicator { display: none; color: var(--muted); font-size: var(--fs-sm); }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { display: inline; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}

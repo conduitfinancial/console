@@ -1,0 +1,14 @@
+{% import "macros.html" as m %}
+{% if url %}
+  {# Resumable, and a bearer credential: shown to the operator who asked, never
+     stored by this console and never written to a log. #}
+  <div class="row">
+    <input type="text" readonly value="{{ url }}" id="idv-url-{{ reference_id }}" style="min-width:22rem">
+    <button type="button" data-copy="#idv-url-{{ reference_id }}">Copy</button>
+  </div>
+  <div class="muted">Deliver out-of-band. The link stays valid while the inquiry does.</div>
+{% elif note %}
+  <div class="muted">{{ note }}</div>
+{% elif problem %}
+  {{ m.problem(problem) }}
+{% endif %}

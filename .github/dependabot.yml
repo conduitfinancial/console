@@ -1,0 +1,34 @@
+# "uv" is a native dependabot package-ecosystem (reads
+# pyproject.toml + uv.lock directly, same as CI's `uv sync --frozen`); fall
+# back to "pip" here if a given GitHub instance's dependabot still refuses
+# that ecosystem name.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # The Dockerfile's two stages are not independent — see the note above its
+    # first FROM — so their images are reviewed as one PR rather than two.
+    groups:
+      dockerfile-images:
+        patterns:
+          - "*"
+
+  # Separate from "docker" above: that ecosystem reads Dockerfiles, this one
+  # reads compose files — neither covers the other, and deploy/docker-compose.yml
+  # lives outside the "docker" entry's directory anyway.
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy"
+    schedule:
+      interval: "weekly"

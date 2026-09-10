@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Confirm conversion · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('transact', 'Confirm this conversion') }}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a> ·
+  operation <a href="/operations/{{ op.id }}"><code>{{ op.id }}</code></a>. Nothing has been sent
+  to Conduit yet — the option below is held on this console's own record until you confirm.
+</p>
+
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+<div class="card">
+  <div class="row">
+    <strong>Quote option <code>{{ chosen.quoteOptionId or '—' }}</code></strong>
+    {# Counted down by static/app.js; the server re-checks the same timestamp on
+       submit, because a disabled button is only a display decision. #}
+    <span id="option-expiry" class="pill wait" data-expires-at="{{ chosen.expiresAt or '' }}">
+      expires {{ chosen.expiresAt|ts if chosen.expiresAt else 'unknown' }}
+    </span>
+  </div>
+  <div class="table-scroll">
+  <table>
+    <tr><th style="width:16rem">Out of</th><td><code>{{ chosen.source or '—' }}</code></td></tr>
+    <tr><th>Into</th><td><code>{{ chosen.destination or '—' }}</code></td></tr>
+    <tr><th>Converting</th><td class="num">{{ chosen.sourceAmount or '—' }}</td></tr>
+    <tr><th>Lands</th><td class="num">{{ chosen.destinationAmount or '—' }}</td></tr>
+    <tr><th>Total debit</th><td class="num">{{ chosen.totalDebit or '—' }}</td></tr>
+    <tr><th>Rate</th><td class="num">{{ chosen.endUserRate or '—' }}
+      {% if chosen.referenceRate %}<span class="muted">(reference {{ chosen.referenceRate }})</span>{% endif %}</td></tr>
+    <tr><th>Spread</th><td class="num">{{ chosen.spreadBps or '—' }} bps</td></tr>
+    <tr><th>Locked side</th><td>{{ chosen.lockSide or '—' }}</td></tr>
+    <tr><th>Quote</th><td><code>{{ chosen.quoteId or '—' }}</code></td></tr>
+  </table>
+  </div>
+</div>
+
+{% if stale %}
+  <div class="problem" role="alert">
+    <strong>This option has expired</strong>
+    <p>
+      Quote options are short-lived and Conduit will refuse a redemption of a lapsed one.
+      <a href="{{ requote }}">Re-quote</a> with the same accounts and amount.
+    </p>
+  </div>
+{% endif %}
+
+<p class="row">
+  {% if can_act %}
+    {# A refusal from Conduit re-renders this page with a 422, so it swaps <main>. #}
+    <form hx-post="/convert/{{ op.id }}"
+          hx-target="main" hx-select="main" hx-swap="outerHTML"
+          hx-sync="this:drop" hx-disabled-elt="find button">
+      <button type="submit" id="confirm-submit" class="primary" {{ 'disabled' if stale }}>
+        Convert
+      </button>
+      {{ m.working('Creating the order…') }}
+    </form>
+  {% else %}
+    <span class="muted">Read-only: sending a conversion needs the <code>order.create</code> permission.</span>
+  {% endif %}
+  <a class="btn" href="{{ requote }}">Re-quote instead</a>
+</p>
+<p class="help">
+  Confirming sends <code>POST /v2/orders</code> once, under this operation's own idempotency key —
+  a double-click, a second tab or a lost response cannot create a second order. The order is
+  created <code>pending</code>; execution is a separate, explicit step on its page.
+</p>
+{% endblock %}

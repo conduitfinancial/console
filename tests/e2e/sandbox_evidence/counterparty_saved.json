@@ -1,0 +1,19 @@
+{
+  "coordinates": [
+    "\u2022\u2022\u2022\u20228999"
+  ],
+  "customer": "cus_034FDUtSvBH32RURFeRobM",
+  "destination_country": "USA",
+  "label": "ZZZTEST Globex 13db0b8577",
+  "rail_family": "us",
+  "recipient_keys": [
+    "accountNumber",
+    "accountType",
+    "bankAddress",
+    "legalName",
+    "postalAddress",
+    "routingNumber",
+    "type"
+  ],
+  "recipient_type": "business"
+}

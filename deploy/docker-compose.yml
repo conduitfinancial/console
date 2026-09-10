@@ -1,0 +1,194 @@
+# Reference deployment (plan v2 §8). One image, three roles: a one-shot
+# migration, the web process, the worker.
+#
+#   cp ../.env.example .env      # then fill it in — see deploy/README.md
+#   docker compose up -d --build
+#   curl -fsS localhost:8000/health/ready
+#
+# Nothing here is secret: every value the app needs comes from `.env`, which is
+# not in this directory's image build context and must not be committed.
+
+name: conduit-console
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: conduit-console:latest
+  # `required: false` so `docker compose config` (and CI's parse check) works in
+  # a checkout that has no secrets in it. A real `up` without the file fails at
+  # startup instead, on the app's own guards — which name the missing setting.
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    # The app talks to the compose network's Postgres, whatever `.env` says for
+    # a local run. Everything else (keys, auth mode, secrets) comes from the file.
+    DATABASE_URL: postgresql+psycopg://console:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/console
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    # Pinned by digest, tag kept for humans (dependabot bumps both together —
+    # .github/dependabot.yml, "docker-compose" ecosystem).
+    image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    environment:
+      POSTGRES_USER: console
+      POSTGRES_DB: console
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U console -d console"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published port: only the app network reaches the database. Add
+    # `ports: ["127.0.0.1:5432:5432"]` for a local psql session, never 0.0.0.0.
+
+  # Schema first, exactly once, and only then the two long-running roles. The
+  # alternative — RUN_MIGRATIONS=1 on `web` — re-runs on every replica start;
+  # Alembic locks, so it is safe, but this is the version you can read.
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  web:
+    <<: *app
+    command: ["web"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Bound to loopback: the reverse proxy below is what faces the network. The
+    # proxy auth mode's whole premise is that nobody reaches this port directly.
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      # /health/ready also proves the database connection, which is what makes
+      # this the gate the proxy should wait on.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://console:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/console
+      # The worker serves nothing, so its liveness is a file it touches after
+      # every successful loop pass.
+      WORKER_HEARTBEAT_PATH: /tmp/worker.heartbeat
+    healthcheck:
+      # Stale by more than 3× the reconcile interval = the loops are not
+      # running. The worker also exits non-zero after WORKER_MAX_FAILED_PASSES
+      # consecutive failures, which `restart: unless-stopped` then acts on —
+      # the healthcheck catches the quieter failure, a process that is up and
+      # doing nothing.
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time() - os.path.getmtime(os.environ['WORKER_HEARTBEAT_PATH']) < 3 * float(os.environ.get('RECONCILE_INTERVAL_SECONDS', 60)) else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # --- reverse proxy + TLS + OIDC ---------------------------------------------
+  #
+  # Uncomment, and drop the `ports:` block from `web` above — with a proxy in
+  # front, the app port should not be published at all.
+  #
+  # The header contract is the whole security model of AUTH_MODE=proxy: the app
+  # trusts X-Auth-Request-* ONLY on a request that also carries
+  # PROXY_SHARED_SECRET in X-Proxy-Auth. The proxy must therefore (a) set that
+  # secret itself, (b) strip any inbound copy of all four headers BEFORE the
+  # identity is decided, and (c) leave the headers forward_auth installs alone
+  # afterwards. See deploy/README.md §3 — it explains why each step is there.
+  #
+  # caddy:
+  #   # Pinned by digest, tag kept for humans (dependabot bumps both together —
+  #   # .github/dependabot.yml, "docker-compose" ecosystem).
+  #   image: caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d
+  #   depends_on: [web]
+  #   ports: ["80:80", "443:443"]      # Caddy gets a Let's Encrypt cert on its own
+  #   environment:
+  #     # Caddy resolves {env.PROXY_SHARED_SECRET} from its OWN process
+  #     # environment. Without this line the placeholder resolves to an empty
+  #     # string and every request is refused by the app.
+  #     PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:?set PROXY_SHARED_SECRET in .env}
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data              # KEEP THIS: it holds the certificates
+  #     - caddy_config:/config
+  #   restart: unless-stopped
+  #
+  # Caddyfile:
+  #
+  #   console.example.com {
+  #       # `route` runs these in the order written. Caddy's global directive
+  #       # order would otherwise put `request_header` AFTER `forward_auth` and
+  #       # delete the identity headers it had just installed.
+  #       route {
+  #           # 1. The webhook receiver authenticates by HMAC signature, not by
+  #           #    identity. It must skip forward_auth entirely — and must never
+  #           #    carry identity headers a caller supplied.
+  #           handle /webhooks/conduit {
+  #               request_header -X-Auth-Request-User
+  #               request_header -X-Auth-Request-Email
+  #               request_header -X-Auth-Request-Groups
+  #               request_header -X-Proxy-Auth
+  #               reverse_proxy web:8000
+  #           }
+  #
+  #           # 2. Strip what the CLIENT sent, before anyone decides who they
+  #           #    are. `copy_headers` only overwrites the headers the auth
+  #           #    response actually sets, so an unset one (Groups, when the IdP
+  #           #    returns no groups) would otherwise survive from the request.
+  #           request_header -X-Auth-Request-User
+  #           request_header -X-Auth-Request-Email
+  #           request_header -X-Auth-Request-Groups
+  #           request_header -X-Proxy-Auth
+  #
+  #           # 3. oauth2-proxy's own endpoints (the login redirect lands here).
+  #           handle /oauth2/* {
+  #               reverse_proxy oauth2-proxy:4180
+  #           }
+  #
+  #           # 4. Authenticate. `copy_headers` copies from the auth RESPONSE
+  #           #    onto the request that carries on to the app.
+  #           forward_auth oauth2-proxy:4180 {
+  #               uri /oauth2/auth
+  #               copy_headers X-Auth-Request-User X-Auth-Request-Email X-Auth-Request-Groups
+  #           }
+  #
+  #           # 5. Add the shared secret and hand it over. NOTHING is stripped
+  #           #    here: step 2 already removed the client's copies, and the
+  #           #    headers present now are the ones step 4 installed.
+  #           reverse_proxy web:8000 {
+  #               header_up X-Proxy-Auth {env.PROXY_SHARED_SECRET}
+  #           }
+  #       }
+  #   }
+  #
+  # oauth2-proxy needs --set-xauthrequest (so /oauth2/auth returns those
+  # headers) and a scope that actually yields groups from your IdP.
+  #
+  # AUTH_MODE=oidc instead? Then the proxy only terminates TLS — no
+  # forward_auth, no header rewriting — and OIDC_REDIRECT_URI must be the
+  # public https URL (the app refuses to derive it in production).
+
+volumes:
+  pgdata:
+  # caddy_data:
+  # caddy_config:

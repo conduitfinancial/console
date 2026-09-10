@@ -1,0 +1,60 @@
+{% import "macros.html" as m %}
+{#- The one RFI panel in this console: rounds, acknowledge-on-view, and the
+    respond form. Included by the application detail page and by the transaction
+    detail page — one respond UI, not two that could drift apart (see
+    `web/rfis.py`). The empty state is *not* here on purpose: "Conduit has not
+    asked for anything" and "Conduit says there is an RFI but the read did not
+    land" are different sentences, and each page knows which one is true.
+
+    Needs: `rfis`, `subject_type`, `subject_id`, `can_rfi`, `actor_email`. -#}
+{% for rfi in rfis %}
+  <div class="card">
+    <div class="row">
+      <strong>{{ rfi.title }}</strong>
+      {{ m.statuspill('rfis', rfi.status) }}
+      <code>{{ rfi.id }}</code>
+      {% if rfi.dueAt %}<span class="muted">due {{ rfi.dueAt|ts }}</span>{% endif %}
+      {% if can_rfi and rfi.needs_ack %}
+        {# Explicit, CSRF-carrying POST fired on render — never on a bare GET. #}
+        <span hx-post="/rfis/{{ rfi.id }}/acknowledge" hx-trigger="load" hx-swap="outerHTML"></span>
+      {% endif %}
+    </div>
+    {% if rfi.summary %}<p>{{ rfi.summary }}</p>{% endif %}
+    {% for round in rfi.rounds or [] %}
+      <p><strong>Round {{ round.roundNumber }}</strong> ({{ round.status }}): {{ round.ask }}</p>
+    {% endfor %}
+    {% if rfi.status == 'responded' %}
+      {# Conduit's turn. `rfi.response_submitted` set this, and only
+         `rfi.more_info_requested` — which sets the status back to `open` —
+         asks for anything more, so an answer form here would invite a second
+         response nobody asked for. It stays on the open lists:
+         still live, just not ours to move. #}
+      <p class="muted">Answered — waiting on Conduit's compliance review.</p>
+    {% endif %}
+    {% if can_rfi and rfi.status == 'open' %}
+      <form hx-post="/rfis/{{ rfi.id }}/respond">
+        <input type="hidden" name="intent" value="{{ new_intent() }}">
+        {# Where to go back to. The route rebuilds the path from the fixed
+           subject map (`app/rfis.py`), so this names a subject rather than
+           carrying a URL. #}
+        <input type="hidden" name="subjectType" value="{{ subject_type }}">
+        <input type="hidden" name="subject" value="{{ subject_id }}">
+        <div class="field">
+          <label for="msg-{{ rfi.id }}">Response *</label>
+          <textarea id="msg-{{ rfi.id }}" name="message" rows="3" required maxlength="10000"></textarea>
+        </div>
+        <div class="field">
+          <label for="email-{{ rfi.id }}">Submitted by</label>
+          <input type="email" id="email-{{ rfi.id }}" value="{{ actor_email }}" readonly>
+        </div>
+        {% call m.uploader(request) %}
+          <input type="file" data-upload data-purpose="rfi_response" data-target="#rfi-chips-{{ rfi.id }}"
+                 accept=".pdf,.png,.jpg,.jpeg">
+        {% endcall %}
+        <div id="rfi-chips-{{ rfi.id }}"></div>
+        <button type="submit" class="primary">Send response</button>
+        {{ m.working('Sending…') }}
+      </form>
+    {% endif %}
+  </div>
+{% endfor %}

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Convert · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('transact', 'Convert') }}
+<p class="muted lede">
+  {% if customer_id %}Customer
+  <a href="/customers/{{ customer_id }}">{{ customer_name or customer_id }}</a>{% if customer_name %}
+  <code>{{ customer_id }}</code>{% endif %}. Moves money
+  between two of this customer's own virtual accounts{% else %}Moves money between two of one
+  customer's own virtual accounts{% endif %}, changing currency on the way. Same-currency
+  moves are
+  <a href="{{ '/customers/' ~ customer_id ~ '/transfers/new' if customer_id else '/transfers/new' }}">transfers</a>.
+</p>
+
+{# The route form, this page's version of the one the payout and transfer screens
+   carry: a separate `<form>` because HTML has no nested ones (the `#prefill`
+   pattern on the payout page), `hx-get` on `change` so picking a customer
+   re-renders the page against THEIR accounts rather than leaving the selects
+   below describing somebody else's. Because the trigger is `change` and not
+   `submit`, the button is the same thing without JavaScript. #}
+<form id="convert-route" class="bar row" method="get" action="/convert" hx-get="/convert"
+      hx-trigger="change from:#customer_id" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <label for="customer_id">Customer</label>
+  {# Names-first, the house datalist: `GET /v2/customers` has no name or search
+     parameter, so a name can only become an id in the browser. Suggestion,
+     never a constraint. #}
+  <input type="text" id="customer_id" name="customer_id" value="{{ customer_id }}"
+         placeholder="cus_…" list="known-customers" size="30">
+  <button type="submit">Reload</button>
+</form>
+{{ m.customer_datalist(customers) }}
+<p class="help">
+  {% if not customer_id %}Pick the customer whose money is moving — a conversion runs between two
+  of one customer's own accounts, so both sides are theirs.{% else %}Whose money is moving.
+  Changing it reloads this page against their accounts.{% endif %}
+  {% if customers_more %}The suggestions are the first {{ customers|length }} customers, not the
+  whole list; an id typed in full is accepted whether or not it is suggested.{% endif %}
+</p>
+
+{% if payout_return %}
+  {# Arrived from a payout the rail/asset guard refused. The link back carries
+     the route and this conversion's destination account, and nothing typed
+     here — the payout's amount is answered against what actually landed. #}
+  <p class="help">
+    This conversion was started from a payout on
+    <code class="raw">{{ payout_route.rail }}</code>.
+    {# Names-over-ids (DESIGN.md): the asset leads, the id stays copyable behind it.
+       No destination and no asset both degrade to the bare sentence. #}
+    <a href="{{ payout_return }}">Back to that payout</a>, funded from the
+    {%- if destination_asset %} {{ destination_asset }}{% endif %} account it lands in
+    {%- if destination %} (<code class="raw">{{ destination.id }}</code>){% endif %} — after this
+    conversion settles, which is when its output can be spent. The payout's own amount is answered there,
+    against what the conversion delivered.
+  </p>
+{% endif %}
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# "there are none" and "we could not ask" are different facts, and only one of
+   them means it is safe to request another account. "Nobody is picked" is a
+   third: no read was made, so none of the three below may be claimed. #}
+{% if not customer_id %}
+{% elif not accounts and not accounts_listed %}
+  <div class="card">
+    <strong>This customer's virtual accounts could not be read</strong>
+    <p class="muted">
+      Either Conduit could not be read, or the accounts have changed status — this console
+      cannot tell which, so it is <em>not</em> saying there are none. See the problem above,
+      and reload before requesting an account: a request is reviewed by a human.
+    </p>
+  </div>
+{% elif not accounts %}
+  <div class="card">
+    <strong>No active virtual account</strong>
+    <p class="muted">
+      A conversion runs between two active accounts.
+      <a href="/customers/{{ customer_id }}/request-account">Request one</a>.
+    </p>
+  </div>
+{% elif not candidates %}
+  <div class="card">
+    <strong>Nothing to convert into</strong>
+    {# Three different reasons there is nothing to land in, and only the first is
+       fixed by requesting an account. `wanted` is empty for a source Conduit
+       will not quote out of AND for a source whose currency could not be read —
+       the second may not be told it cannot be converted, because we do not know
+       what it is. #}
+    <p class="muted">
+      {% if wanted %}
+        This customer holds {{ asset }} only, and a conversion needs an account of
+        the other currency to land in.
+        <a href="/customers/{{ customer_id }}/request-account">Request
+        {{ wanted|join(' or ') }} account</a> — Conduit reviews the request like any other, and the
+        conversion can be quoted the moment it is active.
+      {% elif asset %}
+        Conduit quotes conversions between {{ convert_assets|join(' and ') }} only, and this
+        customer holds {{ asset }}. Requesting another account does not change that —
+        {{ asset }} cannot be converted here at all.
+      {% else %}
+        This account's currency could not be read, so this console cannot say what it converts
+        into — or whether it converts at all. Reload before requesting an account: a request is
+        reviewed by a human.
+      {% endif %}
+    </p>
+  </div>
+{% endif %}
+
+{% if not customer_id %}
+  {# No customer, no accounts to run a conversion between — and no URL to quote
+     against: `POST /customers/{id}/convert/quote` is scoped to the customer
+     whose two accounts the money moves through. So the form waits for the
+     picker above rather than rendering selects about nobody. #}
+  <p class="muted">Pick the customer above and their accounts appear here.</p>
+{% else %}
+{# `hx-disabled-elt` reaches up to the route form's controls (the design
+   pass — the payout/transfer freeze applied here): the customer picker's
+   `change` swaps `main`, and a swap racing this POST replaces the page that
+   would have shown its answer. Lower stakes than the money forms — a quote
+   costs nothing — but the rule is the same: the page holds still in flight. #}
+<form id="convert-form" hx-post="/customers/{{ customer_id }}/convert/quote"
+      hx-target="main" hx-select="main" hx-swap="outerHTML"
+      hx-sync="this:drop"
+      hx-disabled-elt="find button[type=submit], #customer_id, #convert-route button">
+  {# The payout route, carried through the quote round trip so the link back
+     survives it — the same reason the internal reference lives inside this
+     form. Four route parameters, never an amount and never an intent. #}
+  {% for key, value in payout_route.items() if value %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+  {% endfor %}
+  <div class="card">
+    <h2><span class="step-n">1</span> Which accounts</h2>
+    <div class="field">
+      <label for="source">Out of</label>
+      <select id="source" name="source">
+        {% for item in accounts %}
+          <option value="{{ item.id }}" {{ 'selected' if source and item.id == source.id }}>
+            {{ item.id }} · {{ item.asset.code if item.asset else '' }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="destination">Into</label>
+      <select id="destination" name="destination">
+        {% for item in candidates %}
+          <option value="{{ item.id }}" {{ 'selected' if destination and item.id == destination.id }}>
+            {{ item.id }} · {{ item.asset.code if item.asset else '' }}
+          </option>
+        {% else %}
+          <option value="">no account of another currency</option>
+        {% endfor %}
+      </select>
+      <div class="help">Only accounts of a different currency — a same-asset move is a transfer.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-n">2</span> How much</h2>
+    <div class="field">
+      <label for="amount">Amount</label>
+      <input type="text" id="amount" name="amount" inputmode="decimal" class="num"
+             value="{{ amount }}" placeholder="1000.00" required>
+      <div class="help">A decimal string, at the asset's own precision. Never rounded here.</div>
+    </div>
+    <div class="field">
+      {# Two exclusive states, so one control with two segments rather than two
+         dots. The inputs are the same real radios with the same `name` and the
+         same `value`s — `lockSide=source|destination` is what the quote request
+         and the e2e sweep read; only the box around them changed. Each
+         segment's own description follows below, because the segment can only
+         carry the word. #}
+      <label id="lock-side">Which side is fixed</label>
+      <div class="segmented" role="group" aria-labelledby="lock-side">
+        {% for value, description in lock_sides %}
+          <label title="{{ description }}">
+            <input type="radio" name="lockSide" value="{{ value }}" {{ 'checked' if value == lock_side }}>
+            <code>{{ value }}</code>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="help">
+        <code>source</code> fixes what leaves {{ asset or 'the source' }};
+        <code>destination</code> fixes what lands in {{ destination_asset or 'the destination' }}.
+      </div>
+    </div>
+    {# Inside the quote form so it survives the quote round-trip, and read again
+       by each Choose button below via `hx-include` — the order is created by
+       *that* form, and a note typed after the quote came back must still reach
+       it. #}
+    {{ m.internal_reference(reference) }}
+    <p class="row">
+      {# One primary per page: with a quote on screen the page's action is
+         Choose, and this button has become the refresh next to it. #}
+      <button type="submit" class="{{ '' if quote else 'primary' }}">Get quote</button>
+      {{ m.working('Pricing…') }}
+      <span class="muted">A quote prices the pair; it creates nothing and reserves nothing.</span>
+    </p>
+  </div>
+</form>
+{% endif %}
+
+{% if quote %}
+  <h2><span class="step-n">3</span> Pick an option</h2>
+  <p class="row">
+    <span class="pill wait">quote <code>{{ quote.id }}</code></span>
+    <span class="muted">expires {{ quote.expires_at|ts }}</span>
+    <span class="muted">locked side: {{ quote.lock_side }}</span>
+  </p>
+  {% if quote.stale %}
+    <p class="err" role="alert">This quote has already expired — quote again before picking.</p>
+  {% endif %}
+  <div class="table-scroll">
+  <table>
+    <tr>
+      <th>Rail</th><th class="num">Rate</th><th class="num">Spread (bps)</th>
+      <th class="num">Out</th><th class="num">In</th><th class="num">Total debit</th>
+      <th>Fees</th><th></th>
+    </tr>
+    {% for option in quote.options %}
+      <tr>
+        <td>{{ option.rail }}</td>
+        <td class="num">{{ option.end_user_rate or '—' }}</td>
+        <td class="num">{{ option.spread_bps or '—' }}</td>
+        <td class="num">{{ option.source_amount or '—' }}</td>
+        <td class="num">{{ option.destination_amount or '—' }}</td>
+        <td class="num">{{ option.total_debit or '—' }}</td>
+        <td>
+          {% for fee in option.fees %}
+            <div class="muted">{{ fee.charge }} · {{ fee.owner }} · <span class="num">{{ fee.amount }}</span></div>
+          {% else %}
+            <span class="muted">none quoted</span>
+          {% endfor %}
+        </td>
+        <td>
+          {% if can_act and not quote.stale %}
+            {# A refused choice answers 422 with this whole page re-rendered, so
+               it targets <main> like every other form that can receive one
+               (app/web/__init__.py). Without it the document would be injected
+               into this cell. #}
+            {# The same freeze as the quote form's, and here it matters more:
+               this POST mints the operation, and a customer change mid-flight
+               swaps `main` to a quote-less page. #}
+            <form hx-post="/customers/{{ customer_id }}/convert/select"
+                  hx-target="main" hx-select="main" hx-swap="outerHTML"
+                  hx-include="#internal-reference"
+                  hx-sync="this:drop"
+                  hx-disabled-elt="find button, #customer_id, #convert-route button">
+              <input type="hidden" name="intent" value="{{ new_intent() }}">
+              <input type="hidden" name="source" value="{{ source.id if source else '' }}">
+              <input type="hidden" name="destination" value="{{ destination.id if destination else '' }}">
+              {# The panel's own description of this option, carried back so the
+                 confirm screen can count down against the expiry it showed.
+                 There is no GET /v2/quotes/{id} to re-read it from — and nothing
+                 rests on it: Conduit refuses an expired option itself. #}
+              <input type="hidden" name="selection" value="{{ selections[loop.index0] }}">
+              <button type="submit" class="primary">Choose</button>{{ m.working() }}
+            </form>
+          {% elif not can_act %}
+            <span class="muted">Needs <code>order.create</code></span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">
+        Conduit priced no option for this pair — no rail it offers can carry this conversion right
+        now. Try a different amount or locked side above, or
+        <a href="/customers/{{ customer_id }}">go back to the customer</a>.
+      </td></tr>
+    {% endfor %}
+  </table>
+  </div>
+{% endif %}
+{% endblock %}

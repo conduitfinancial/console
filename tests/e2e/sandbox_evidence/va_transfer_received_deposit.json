@@ -1,0 +1,38 @@
+{
+  "_note": "sandbox began settling the virtual-account arm 2026-09-01 ~20:00 UTC; probe exit 2",
+  "_observed_at": "2026-09-01T20:20Z",
+  "completedAt": "2026-09-01T20:14:06.133Z",
+  "createdAt": "2026-09-01T20:14:02.834Z",
+  "customerId": "cus_034FCkv7WgWB7bqrvnQTmq",
+  "customerName": "ZZZTEST Console SBX B2 EOOD",
+  "destination": {
+    "assetAmount": {
+      "amount": "1.00",
+      "code": "USD"
+    },
+    "type": "virtual_account",
+    "virtualAccountId": "vac_034FClZQ2SjTWTH9yBxxky",
+    "wireReceive": {
+      "accountLast4": "6903",
+      "bankName": "Sandbox Mock Bank",
+      "rail": "us",
+      "routingNumber": "021000021"
+    }
+  },
+  "fees": [],
+  "hasRfi": false,
+  "id": "txn_034HRmQrhbp2lyPWQ6Ozyb",
+  "remittance": {
+    "reference": "ZZZTEST-VA-PROBE"
+  },
+  "source": {
+    "assetAmount": {
+      "amount": "1.00",
+      "code": "USD"
+    },
+    "originatingTransactionId": "txn_034HRmGsnk0798PRyU7zUE",
+    "type": "internal_transfer"
+  },
+  "status": "completed",
+  "type": "deposit"
+}

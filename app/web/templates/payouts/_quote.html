@@ -1,0 +1,61 @@
+{% import "macros.html" as m %}
+{# The indicative-quote panel, swapped in on its own by the Get quote button.
+   `data-expires-at` is what `static/app.js` counts down to disable the confirm
+   button; the server re-checks the same timestamp on submit, because a disabled
+   button is a display decision. #}
+<div id="quote-panel" {% if quote %}data-expires-at="{{ quote.expires_at }}"{% endif %}>
+  {% if problem %}{{ m.problem(problem) }}{% endif %}
+  {% if quote %}
+    <div class="card">
+      <div class="row">
+        <strong>Indicative pricing</strong>
+        <span class="pill warn">indicative only — not a locked rate</span>
+        <span class="muted">expires {{ quote.expires_at|ts }}</span>
+      </div>
+      <p class="help">
+        Conduit prices this route now; the payout is charged at whatever holds when it is
+        actually sent. Refresh immediately before confirming — a lapsed quote disables the
+        send button until you do.
+      </p>
+      {# The expiry is what the operator is shown and what the submit claims; the
+         seal is this console's HMAC over the same timestamp, and the submit
+         refuses a claim whose seal is missing, altered, or over a different
+         moment. Both travel or neither does. #}
+      <input type="hidden" name="quoteExpiresAt" value="{{ quote.expires_at }}" form="payout-form">
+      <input type="hidden" name="quoteSeal" value="{{ seal }}" form="payout-form">
+      <div class="table-scroll">
+      <table>
+        <tr>
+          <th>Rail</th><th class="num">Rate</th><th class="num">Spread (bps)</th>
+          <th class="num">Total debit</th><th class="num">Recipient gets</th><th>Fees</th>
+        </tr>
+        {% for option in quote.options %}
+          <tr>
+            <td>{{ option.rail }}</td>
+            <td class="num">{{ option.end_user_rate or '—' }}</td>
+            <td class="num">{{ option.spread_bps or '—' }}</td>
+            <td class="num">{{ option.total_debit or '—' }}</td>
+            <td class="num">{{ option.recipient_amount or option.destination_amount or '—' }}</td>
+            <td>
+              {% for fee in option.fees %}
+                <div class="muted">{{ fee.charge }} · {{ fee.owner }} · <span class="num">{{ fee.amount }}</span></div>
+              {% else %}
+                <span class="muted">none quoted</span>
+              {% endfor %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">
+            Conduit priced no option for this route — the payout can still be sent, and is charged
+            at whatever holds when it lands. Change the rail or destination country above to price
+            a different corridor.
+          </td></tr>
+        {% endfor %}
+      </table>
+      </div>
+      {% if quote.stale %}
+        <p class="err" role="alert">This quote has already expired — refresh it before sending.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

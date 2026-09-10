@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ customer_id }} · Conduit Console{% endblock %}
+{% block body %}
+{# The name Conduit registered, with the id demoted beneath it. The fallback
+   chain is `m.customer_datalist`'s, character for character — the two places
+   that turn a customer DTO into a name must not disagree — and it ends at the
+   id, so a customer the read failed for still has a heading. #}
+{% set name = (customer.legalName
+     or ((customer.firstName or '') ~ ' ' ~ (customer.lastName or ''))|trim
+     or customer_id) if customer else customer_id %}
+{# No name resolved: the id has nowhere to go but the mono `.head-id`
+   treatment under a generic h1, same fallback idiom as accounts/orders
+   detail — never the bare id itself as the h1's display face (it overflows
+   at 375, unlike a name which wraps on spaces). #}
+{{ m.page_head('customer', 'Customer' if name == customer_id else name, mono=customer_id) }}
+{# Pills, not a line of links: these are the seven places to go from a customer,
+   and a row of underlined text set them at the weight of prose. Every href is
+   unchanged. None is `primary` — this page has no single forward action, and
+   promoting one of three money movements would be the console picking. #}
+<p class="row">
+  <a class="btn" href="/applications?customerId={{ customer_id }}">Applications</a>
+  <a class="btn" href="/customers/{{ customer_id }}/contacts">Contacts</a>
+  <a class="btn" href="/transactions?type=withdrawal&amp;customerId={{ customer_id }}">Payouts</a>
+  {% if can_act %}
+    <a class="btn" href="/customers/{{ customer_id }}/payouts">Send a payout</a>
+    <a class="btn" href="/customers/{{ customer_id }}/transfers/new">Transfer</a>
+    <a class="btn" href="/customers/{{ customer_id }}/convert">Convert</a>
+  {% endif %}
+  {% if customer and customer.applicationId %}
+    <span class="muted">onboarded by <a href="/applications/{{ customer.applicationId }}"><code>{{ customer.applicationId }}</code></a></span>
+  {% endif %}
+</p>
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{% if customer %}
+  <h2>Identity</h2>
+  <div class="table-scroll">
+  <table>
+    {% for label, value in identity %}
+      <tr><th style="width:14rem">{{ label }}</th><td>{{ value }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  <h2>Features</h2>
+  <div class="table-scroll">
+  <table>
+    {% for row in features %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td>{% if row.is_active %}<span class="pill ok">Active</span>
+            {% else %}<span class="pill muted">Not active</span>{% endif %}</td>
+        <td>
+          {% if not row.supported %}
+            {# Out of v1 scope, or a feature this build has never heard of:
+               stated plainly, never a button that would post a body this
+               console cannot construct. #}
+            <span class="muted">{{ row.note }}</span>
+          {% elif row.is_active %}
+            <span class="muted">Accounts below.</span>
+          {% elif can_request_account %}
+            <a class="btn" href="/customers/{{ customer_id }}/request-account">Request bank account</a>
+          {% else %}
+            <span class="muted">Requesting an account needs the <code>account.request</code> permission.</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      {# No features at all is the *first* account case, not a dead end: the
+         same button the virtual_account row would have carried, because the
+         request is a feature application and needs no feature to exist yet. #}
+      <tr><td class="muted">Conduit lists no features for this customer.</td>
+          <td></td>
+          <td>{% if can_request_account %}
+                <a class="btn" href="/customers/{{ customer_id }}/request-account">Request bank account</a>
+              {% else %}
+                <span class="muted">Requesting an account needs the <code>account.request</code> permission.</span>
+              {% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  {% if accounts_problem %}{{ m.problem(accounts_problem) }}{% endif %}
+  {% if accounts_page %}
+    <h2>Virtual accounts</h2>
+    {% call m.virtual_accounts_table(accounts_page.items, customer_id, balance_rows) %}
+      No virtual accounts on this page — this customer has nowhere to be paid into yet.
+      {% if can_request_account %}<a href="/customers/{{ customer_id }}/request-account">Request one</a>;
+      Conduit decides it like any other application.{% endif %}
+    {% endcall %}
+    <p class="row">
+      {% set base = "/customers/" ~ customer_id ~ "?accounts_cursor=" %}
+      {% if accounts_page.prev_cursor %}
+        <a class="btn" href="{{ base }}{{ accounts_page.prev_cursor }}&amp;accounts_direction=backward">Previous</a>
+      {% endif %}
+      {% if accounts_page.next_cursor %}
+        <a class="btn" href="{{ base }}{{ accounts_page.next_cursor }}">Next</a>
+      {% endif %}
+      {% if can_request_account %}
+        <a class="btn" href="/customers/{{ customer_id }}/request-account">Request another account</a>
+      {% endif %}
+    </p>
+  {% endif %}
+{% endif %}
+{% endblock %}

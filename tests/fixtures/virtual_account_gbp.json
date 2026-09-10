@@ -1,0 +1,38 @@
+{
+  "id": "vac_8mZjR3nQw6vB9pL2tK4x7y",
+  "status": "active",
+  "asset": { "code": "GBP" },
+  "balances": [
+    {
+      "available": { "code": "GBP", "amount": "42000.00" },
+      "pending": { "code": "GBP", "amount": "0.00" },
+      "frozen": { "code": "GBP", "amount": "0.00" }
+    }
+  ],
+  "depositInstructions": [
+    {
+      "type": "uk_domestic",
+      "currency": "GBP",
+      "accountNumber": "12345678",
+      "sortCode": "040004",
+      "beneficiaryName": "ZZZTEST Console E2E EOOD",
+      "beneficiaryAddress": "1 Test Street, Sofia, 1000, BG",
+      "paymentReference": "VAC8MZJR3NQW6VB9PL2TK4X7Y",
+      "bank": {
+        "legalName": "Example Bank UK",
+        "address": "2 Bank Street, London, EC1V 9NR, GB",
+        "bic": "EXMPGB2LXXX",
+        "postalAddress": {
+          "addressLine1": "2 Bank Street",
+          "city": "London",
+          "postalCode": "EC1V 9NR",
+          "country": "GB"
+        }
+      },
+      "rails": [{ "rail": "faster_payments" }, { "rail": "chaps" }]
+    }
+  ],
+  "activatedAt": "2026-08-20T10:15:00.000Z",
+  "createdAt": "2026-08-19T09:30:00.000Z",
+  "updatedAt": "2026-08-20T10:15:00.000Z"
+}

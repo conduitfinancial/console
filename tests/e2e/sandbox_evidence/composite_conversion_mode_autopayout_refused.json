@@ -1,0 +1,22 @@
+{
+  "_host": "https://api.sandbox.conduit.financial",
+  "_observed_at": "2026-09-01T18:42:56Z",
+  "_probe": "a conversion-mode option (no destinationCountry) redeemed WITH a fiat autoPayout",
+  "response": {
+    "body": {
+      "correlationId": "1b7ea5e3-b55a-4a4c-b14a-e4cf125aa7cc",
+      "detail": "Invalid order combo: autoPayout is not supported on a fiat-to-fiat conversion; create a payout from the destination virtual account instead.",
+      "details": {
+        "reason": "autoPayout is not supported on a fiat-to-fiat conversion; create a payout from the destination virtual account instead."
+      },
+      "docs": "https://conduit-v2.mintlify.app/errors#invalid-order-combo",
+      "instance": "/v2/orders",
+      "resolution": "Adjust the source/destination pair to a supported combination, or align autoPayout with the order direction: fiat autoPayout for OFFRAMP, crypto autoPayout for ONRAMP. For ONRAMP, `recipient.chain` must match the destination wallet's chain.",
+      "status": 422,
+      "timestamp": "2026-09-01T18:42:56.009Z",
+      "title": "Invalid Order Combination",
+      "type": "INVALID_ORDER_COMBO"
+    },
+    "status": 422
+  }
+}

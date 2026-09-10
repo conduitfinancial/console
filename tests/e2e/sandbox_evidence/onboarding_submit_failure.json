@@ -1,0 +1,14 @@
+{
+  "correlationId": "118ae94b-8bf6-43bd-82a7-005e7748a685",
+  "detail": "An approved customer already exists for this organization with the same tax identifier.",
+  "details": {
+    "customerId": "cus_034FCeDANniGVBQX8P3qoV"
+  },
+  "docs": "https://conduit-v2.mintlify.app/errors#customer-already-onboarded",
+  "instance": "/v2/onboarding",
+  "resolution": "Use the existing customer (returned as details.customerId) rather than creating a new one. To replace it, decommission the existing customer first.",
+  "status": 409,
+  "timestamp": "2026-08-28T21:56:43.084Z",
+  "title": "Customer Already Onboarded",
+  "type": "CUSTOMER_ALREADY_ONBOARDED"
+}

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Dispatch batch · Conduit Console{% endblock %}
+{% block body %}
+{# The money moment. Everything on this page is derived here — the totals from
+   the rows, the exclusions from the same count, the funding account and its
+   balance from Conduit, the shared documents from the batch — so nothing is
+   inherited on trust from the report before it. #}
+{% call m.page_head('transact', 'Dispatch this batch', mono=batch.id|string) %}
+  <a class="btn" href="/customers/{{ customer_id }}/batches/{{ batch.id }}">Back to the report</a>
+{% endcall %}
+
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a> ·
+  <code>{{ batch.filename }}</code> · over {{ batch.rail }} to a {{ batch.recipient_type }}
+  recipient{% if batch.destination_country %} in {{ batch.destination_country }}{% endif %}
+  {%- for purpose, count in purposes %}{{ ', ' if loop.first else ' · ' }}{{ count }} × {{ enum_label(purpose) or purpose or '(no purpose)' }}{% endfor %}.
+</p>
+
+<div class="card">
+  <p class="row">
+    <span class="count">{{ totals.rows }} row{{ '' if totals.rows == 1 else 's' }} uploaded ·
+      {{ totals.valid }} valid</span>
+    <span class="spacer"></span>
+    {{ m.statuspill('payout_batches', batch.status) }}
+  </p>
+  {# The totals and — beside them, named rather than merely absent — what they
+     leave out. #}
+  <div class="table-scroll">
+  <table>
+    <tr><th>Payouts to send</th><td class="num">{{ sending.valid }}</td></tr>
+    <tr><th>Total</th>
+      <td class="num">
+        {% for asset, amount in sending.by_currency.items() %}<strong>{{ amount }} {{ asset }}</strong>{% else %}—{% endfor %}
+      </td></tr>
+    {% if totals.invalid %}
+      <tr><th>Excluded by validation</th>
+        <td>{{ totals.invalid }} row{{ '' if totals.invalid == 1 else 's' }} — not counted in the
+          total above and not sent</td></tr>
+    {% endif %}
+    {% if tally.sent or tally.rejected or tally.unconfirmed %}
+      <tr><th>Already dispatched</th>
+        <td>{{ tally.sent }} sent · {{ tally.rejected }} refused by Conduit ·
+          {{ tally.unconfirmed }} awaiting confirmation — none of these is sent again</td></tr>
+    {% endif %}
+    <tr><th>Funded from</th>
+      <td>
+        <code>{{ batch.virtual_account_id }}</code> ({{ batch.asset }})
+        {% if not account %}
+          <div class="err">
+            This account is not among the customer's active virtual accounts right now — either
+            Conduit could not be read, or the account has changed status since the batch was
+            uploaded. Its balance is unknown here; dispatching still funds from it, and Conduit
+            refuses each row that it cannot.
+          </div>
+        {% endif %}
+      </td></tr>
+  </table>
+  </div>
+  {% if balances %}
+    <div class="table-scroll">
+    <table>
+      <tr><th>Asset</th><th class="num">Available</th><th class="num">Pending</th><th class="num">Frozen</th></tr>
+      {% for row in balances %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td class="num">{{ m.amount(row.available) }}</td>
+          <td class="num">{{ m.amount(row.pending) }}</td>
+          <td class="num">{{ m.amount(row.frozen) }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <p class="muted">
+      The balance is Conduit's, read just now. This console does not decide whether it covers the
+      total — Conduit accepts or refuses each payout on its own, and a refusal lands on that row.
+    </p>
+  {% elif account %}
+    <p class="muted">
+      Conduit reported no balance for this account.
+    </p>
+  {% endif %}
+</div>
+
+{% if batch.document_ids %}
+  <div class="card">
+    <h3>Shared documents</h3>
+    <p class="muted">
+      {{ batch.document_ids|length }} document{{ '' if batch.document_ids|length == 1 else 's' }},
+      riding with <strong>the rows whose purpose requires one</strong> and with no others — the
+      same <code>documents[]</code> a single payout carries. A payroll register attached to a
+      goods row would be evidence for a payment it is not about.
+    </p>
+    <ul>
+      {% for doc_id in batch.document_ids %}<li><code>{{ doc_id }}</code></li>{% endfor %}
+    </ul>
+    {{ m.accepted_documents({'acceptedDocumentTypes': batch.accepted_document_types or []}) }}
+  </div>
+{% elif batch.documents_required %}
+  <div class="problem warn" role="alert">
+    <strong>This route requires a supporting document and none is attached</strong>
+    <div>Go back to the report and attach one before dispatching.</div>
+  </div>
+{% endif %}
+
+{% if unreadable_route %}
+  <div class="problem wait" role="alert">
+    <strong>This route's requirements could not be read just now</strong>
+    <div>
+      Dispatch reads them again when it runs, and refuses to send anything if they are still
+      unreadable — so nothing will be sent on a guess. Try again in a moment.
+    </div>
+  </div>
+{% elif drifted %}
+  <div class="problem warn" role="alert">
+    <strong>Conduit's requirements for this route have changed since these rows were validated</strong>
+    <div>
+      The rows below are the ones the totals describe, and they are what will be sent. A row that
+      the new requirements refuse comes back as <em>that row's</em> rejection with Conduit's own
+      problem detail — nothing is silently adjusted here. If that matters more than sending today,
+      go back, abandon this batch and upload the file against a fresh template.
+    </div>
+  </div>
+{% endif %}
+
+{# The consequence sentence (DESIGN.md's consequence row), scaled to a batch and
+   derived from the handler rather than from what the button sounds like: the
+   count and total are the rows', the "exactly once" is `batches.intent_for`. #}
+<form hx-post="/customers/{{ customer_id }}/batches/{{ batch.id }}/dispatch"
+      hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+  <p>
+    <strong>
+      Dispatching sends {{ sending.valid }}
+      payout{{ '' if sending.valid == 1 else 's' }} totaling
+      {% for asset, amount in sending.by_currency.items() %}<span class="num">{{ amount }} {{ asset }}</span>{% else %}—{% endfor %}
+      from <code>{{ batch.virtual_account_id }}</code>.
+    </strong>
+    Each row is sent exactly once — re-clicking, reloading, or re-dispatching cannot send a row
+    twice. Each row's payout carries its own idempotency key, and the identity that key hangs off
+    is this batch's id and the row's number, which never change.
+  </p>
+  <p class="muted">
+    Rows are sent one at a time, and the report follows them live. A row Conduit refuses is
+    <strong>final in this batch</strong>: export the results, correct those rows, and upload them
+    as a new batch. A row whose answer does not arrive is left to the reconciler, which resolves it
+    from Conduit's own records — it is never re-sent by hand.
+  </p>
+  <p class="row">
+    <button type="submit" class="primary">Dispatch {{ sending.valid }} payout{{ '' if sending.valid == 1 else 's' }}</button>
+    <a class="btn" href="/customers/{{ customer_id }}/batches/{{ batch.id }}">Cancel</a>
+    {{ m.working('Starting…') }}
+  </p>
+</form>
+
+<h2>What will be sent</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Row</th><th>Purpose</th><th>Destination</th><th class="num">Amount</th><th>State</th></tr>
+  {% for row in rows %}
+    <tr {{ 'class="exception"'|safe if row.errors }}>
+      <td class="num">{{ row.row_number }}</td>
+      <td>{{ enum_label(row.purpose) or '—' }}</td>
+      <td>
+        {% if row.contact_label %}
+          {{ row.contact_label }} <div class="muted"><code>{{ row.contact_id }}</code></div>
+        {% elif row.unreadable %}
+          <span class="muted">unreadable</span>
+        {% else %}
+          {{ row.recipient.legalName or '—' }}
+        {% endif %}
+        {% if not row.unreadable %}<div class="muted num">{{ coords(row.recipient) }}</div>{% endif %}
+      </td>
+      <td class="num">{{ row.amount or '—' }}{% if row.amount %} {{ batch.asset }}{% endif %}</td>
+      <td>
+        {% if row.state == 'pending' %}
+          <span class="muted">will be sent</span>
+        {% elif row.state == 'invalid' %}
+          <span class="muted">excluded — invalid</span>
+        {% else %}
+          {{ m.statuspill('payout_batch_rows', row.state) }}
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

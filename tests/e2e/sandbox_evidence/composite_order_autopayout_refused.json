@@ -1,0 +1,61 @@
+{
+  "_host": "https://api.sandbox.conduit.financial",
+  "_observed_at": "2026-09-01T22:29:11Z",
+  "_probe": "redeeming a payout-mode option with autoPayout on a fiat->fiat pair",
+  "request": {
+    "body": {
+      "autoPayout": {
+        "purpose": "payment_for_goods_or_services",
+        "rail": "sepa",
+        "recipient": {
+          "bankAddress": {
+            "addressLine1": "123 Sandbox Way",
+            "city": "Testville",
+            "country": "DEU",
+            "postalCode": "00000"
+          },
+          "bankName": "Sandbox Mock Bank",
+          "bic": "MOCKDEFFXXX",
+          "iban": "DE89370400440532013000",
+          "legalName": "ZZZTEST Console SBX Recipient GmbH",
+          "postalAddress": {
+            "addressLine1": "ZZZTEST Strasse 1",
+            "city": "Berlin",
+            "country": "DEU",
+            "postalCode": "10115"
+          },
+          "type": "BUSINESS"
+        }
+      },
+      "clientReferenceId": "ZZZTEST-comp-e79bb130",
+      "destination": {
+        "id": "vac_034FCiLdKtpwHn33PX9h13",
+        "type": "virtual_account"
+      },
+      "quoteOptionId": "qop_034HV634ad6dU6zOq80etF",
+      "source": {
+        "id": "vac_034FCiCByMrhNurskZcYDB",
+        "type": "virtual_account"
+      }
+    },
+    "method": "POST",
+    "path": "/v2/orders"
+  },
+  "response": {
+    "body": {
+      "correlationId": "d63491d9-01ad-4116-95a8-2e8feab8b011",
+      "detail": "Invalid order combo: autoPayout is not supported on a fiat-to-fiat conversion; create a payout from the destination virtual account instead.",
+      "details": {
+        "reason": "autoPayout is not supported on a fiat-to-fiat conversion; create a payout from the destination virtual account instead."
+      },
+      "docs": "https://conduit-v2.mintlify.app/errors#invalid-order-combo",
+      "instance": "/v2/orders",
+      "resolution": "Adjust the source/destination pair to a supported combination, or align autoPayout with the order direction: fiat autoPayout for OFFRAMP, crypto autoPayout for ONRAMP. For ONRAMP, `recipient.chain` must match the destination wallet's chain.",
+      "status": 422,
+      "timestamp": "2026-09-01T22:29:11.194Z",
+      "title": "Invalid Order Combination",
+      "type": "INVALID_ORDER_COMBO"
+    },
+    "status": 422
+  }
+}

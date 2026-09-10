@@ -1,0 +1,66 @@
+{
+  "activatedAt": "2026-08-20T20:40:51.662Z",
+  "asset": {
+    "code": "USD"
+  },
+  "balances": [
+    {
+      "available": {
+        "amount": "0.00",
+        "code": "USD"
+      },
+      "frozen": {
+        "amount": "0.00",
+        "code": "USD"
+      },
+      "pending": {
+        "amount": "0.00",
+        "code": "USD"
+      }
+    }
+  ],
+  "createdAt": "2026-08-20T20:27:42.729Z",
+  "depositInstructions": [
+    {
+      "accountNumber": "0000000000000000",
+      "bank": {
+        "address": "123 Sandbox Way, Testville, TS 00000",
+        "legalName": "Sandbox Mock Bank"
+      },
+      "beneficiaryAddress": "123 Sandbox Way\nTestville, US-TS, 00000\nUSA",
+      "beneficiaryName": "ZZZTEST Console Mock Corp",
+      "beneficiaryPostalAddress": {
+        "addressLine1": "123 Sandbox Way",
+        "city": "Testville",
+        "country": "US",
+        "postalCode": "00000",
+        "state": "US-TS"
+      },
+      "currency": "USD",
+      "rails": [
+        {
+          "rail": "ach",
+          "routingNumber": "000000000",
+          "sameDayEligible": true
+        },
+        {
+          "rail": "fedwire",
+          "routingNumber": "000000000"
+        },
+        {
+          "fednowCap": "1000000.01",
+          "networks": [
+            "tch",
+            "fednow"
+          ],
+          "rail": "rtp",
+          "routingNumber": "000000000"
+        }
+      ],
+      "type": "us_domestic"
+    }
+  ],
+  "id": "vac_034Ac2yyAcZ5esiw2Qk2kI",
+  "status": "active",
+  "updatedAt": "2026-08-20T20:40:51.662Z"
+}

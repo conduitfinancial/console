@@ -1,0 +1,185 @@
+{
+  "rail": "chaps",
+  "fields": [
+    {
+      "name": "virtualAccountId",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "destination.type",
+      "type": "string",
+      "required": true,
+      "enum": ["fiat"]
+    },
+    {
+      "name": "destination.rail",
+      "type": "string",
+      "required": true,
+      "enum": ["chaps"]
+    },
+    {
+      "name": "destination.recipient.accountNumber",
+      "type": "string",
+      "required": true,
+      "minLength": 8,
+      "maxLength": 8,
+      "pattern": "^[0-9]{8}$"
+    },
+    {
+      "name": "destination.recipient.sortCode",
+      "type": "string",
+      "required": true,
+      "minLength": 6,
+      "maxLength": 6,
+      "pattern": "^[0-9]{6}$"
+    },
+    {
+      "name": "destination.recipient.bankName",
+      "type": "string",
+      "required": false,
+      "maxLength": 140
+    },
+    {
+      "name": "destination.recipient.bankAddress.addressLine1",
+      "type": "string",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "name": "destination.recipient.bankAddress.addressLine2",
+      "type": "string",
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "name": "destination.recipient.bankAddress.city",
+      "type": "string",
+      "required": true,
+      "maxLength": 80
+    },
+    {
+      "name": "destination.recipient.bankAddress.state",
+      "type": "string",
+      "required": false,
+      "maxLength": 80
+    },
+    {
+      "name": "destination.recipient.bankAddress.postalCode",
+      "type": "string",
+      "required": false,
+      "maxLength": 32
+    },
+    {
+      "name": "destination.recipient.bankAddress.country",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "destination.recipient.phone",
+      "type": "string",
+      "required": false,
+      "maxLength": 40
+    },
+    {
+      "name": "destination.recipient.type",
+      "type": "string",
+      "required": true,
+      "enum": ["BUSINESS"]
+    },
+    {
+      "name": "destination.recipient.legalName",
+      "type": "string",
+      "required": true,
+      "maxLength": 140
+    },
+    {
+      "name": "destination.recipient.countryOfRegistration",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "destination.recipient.postalAddress.addressLine1",
+      "type": "string",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "name": "destination.recipient.postalAddress.addressLine2",
+      "type": "string",
+      "required": false,
+      "maxLength": 120
+    },
+    {
+      "name": "destination.recipient.postalAddress.city",
+      "type": "string",
+      "required": true,
+      "maxLength": 80
+    },
+    {
+      "name": "destination.recipient.postalAddress.state",
+      "type": "string",
+      "required": false,
+      "maxLength": 80
+    },
+    {
+      "name": "destination.recipient.postalAddress.postalCode",
+      "type": "string",
+      "required": false,
+      "maxLength": 32
+    },
+    {
+      "name": "destination.recipient.postalAddress.country",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "destination.remittance.reference",
+      "type": "string",
+      "required": false,
+      "maxLength": 140
+    },
+    {
+      "name": "destination.remittance.description",
+      "type": "string",
+      "required": false,
+      "maxLength": 280
+    }
+  ],
+  "documentation": {
+    "required": true,
+    "reason": "A supporting document is required unless the payout purpose is intercompany.",
+    "acceptedDocumentTypes": [
+      "bank_verification_letter",
+      "invoice",
+      "contract",
+      "payroll_register",
+      "investment_agreement",
+      "other"
+    ]
+  },
+  "whitelist": {
+    "required": false
+  },
+  "blockedJurisdictions": [
+    "AFG",
+    "BDI",
+    "CUB",
+    "ERI",
+    "HTI",
+    "IRN",
+    "LBY",
+    "MLI",
+    "MMR",
+    "PRK",
+    "RUS",
+    "SDN",
+    "SOM",
+    "SSD",
+    "SXM",
+    "SYR",
+    "UKR",
+    "VEN",
+    "YEM"
+  ]
+}

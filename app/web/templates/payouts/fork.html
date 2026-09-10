@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Send a payout · Conduit Console{% endblock %}
+{% block body %}
+{# The Transact fork. Deliberately the FIRST question: its two answers are two
+   flows, not two values — a form or a file — and everything downstream (which
+   purpose, which columns, which confirmation) differs between them. Since Phase
+   17 this is also where the ribbon lands, so it asks **who** on the same screen:
+   one bounded customers read for the datalist, and no other Conduit call. #}
+{% call m.page_head('transact', 'Send a payout') %}
+  {% if customer_id %}<a class="btn" href="/customers/{{ customer_id }}/batches">All batches</a>{% endif %}
+{% endcall %}
+
+<p class="muted lede">
+  {% if customer_id %}Customer
+  <a href="/customers/{{ customer_id }}">{{ customer_name or customer_id }}</a>{% if customer_name %}
+  <code>{{ customer_id }}</code>{% endif %}. {% endif %}One payment or many — the rest of the flow
+  differs from here, so it is the first thing asked.
+</p>
+
+{# The route form, this page's version of the one every Transact screen carries:
+   changing the customer re-renders the page rather than leaving a link behind
+   that points at the customer who was picked a moment ago. Because the trigger
+   is `change` and not `submit`, the button is the same thing without
+   JavaScript. #}
+<form id="fork-route" class="bar row" method="get" action="/payouts" hx-get="/payouts"
+      hx-trigger="change from:#customer_id" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  {# The control inside its label, the shape `#route-row` already uses: a tray
+     field is a micro-label OVER its control, and a sibling label is the word in
+     front the tray ruling names. #}
+  <label for="customer_id">Customer
+    <input type="text" id="customer_id" name="customer_id" value="{{ customer_id }}"
+           placeholder="cus_…" list="known-customers" size="30">
+  </label>
+  <button type="submit">Reload</button>
+</form>
+{{ m.customer_datalist(customers) }}
+<p class="help">
+  {# "Started", not "filled in": with nobody picked, that page answers the ROUTE
+     and its requirements — the payment's own fields wait for the customer. #}
+  {% if not customer_id %}Pick the customer whose money is moving. A single payment can be started
+  without one — the customer is the first field of that form too — but a batch is uploaded for
+  one customer, so its link appears once this is answered.{% else %}Whose money is
+  moving.{% endif %}
+  {% if customers_more %}The suggestions are the first {{ customers|length }} customers, not the
+  whole list; an id typed in full is accepted whether or not it is suggested.{% endif %}
+</p>
+
+<div class="card">
+  <h2>Single payment</h2>
+  <p class="muted">
+    One payout, filled in on a form. Pick the purpose, rail, recipient type and destination and
+    the fields Conduit requires for that route appear underneath — including its documentation
+    and whitelist gating, which this console reads rather than assumes.
+  </p>
+  <p class="row">
+    {# Customer-scoped where a customer is known — that URL is unchanged and
+       lands with them already filled in — and the bare form where one is not. #}
+    <a class="btn primary"
+       href="{{ '/customers/' ~ customer_id ~ '/payouts/new' if customer_id else '/payouts/new' }}">Single payment</a>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Batch payment</h2>
+  <p class="muted">
+    Many payouts from one CSV — one row per payment, and a <code>purpose</code> column, so a
+    single file can carry supplier payments and an intercompany move together. You download a
+    template built from this route's live requirements, fill it, and get a per-row report with
+    the totals before anything can be dispatched. Uploading sends nothing.
+  </p>
+  {% if not customer_id %}
+    {# A batch is customer-scoped at upload by design (`app/web/batches.py`), so
+       there is no customer-less URL to offer. The fact, not a dead link. #}
+    <p class="muted">A batch is uploaded for one customer. Pick one above and this arm opens.</p>
+  {% else %}
+    <p class="row">
+      {% if can_act %}
+        <a class="btn" href="/customers/{{ customer_id }}/batches/new">Batch payment</a>
+      {% else %}
+        <a class="btn" href="/customers/{{ customer_id }}/batches">Batch payment (read-only)</a>
+      {% endif %}
+    </p>
+    {% if not can_act %}
+      <p class="muted">Uploading a batch needs the <code>batch.upload</code> permission; the reports are readable here.</p>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

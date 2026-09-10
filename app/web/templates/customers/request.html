@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Request an account · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('customer', 'Request a bank account') }}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>. A bank account
+  is a feature <em>application</em>: Conduit answers with an <code>app_…</code> the dashboard
+  follows, and it is decided later — nothing activates on submit.
+</p>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+<div class="card">
+  <h2>Account currency</h2>
+  <p class="help">
+    The currencies <code>GET /customers/{id}/features/requirements</code> allows for this
+    customer — Conduit's own list, not one this console keeps. Availability is still checked
+    per provider when the request is sent — a currency can be offered here and refused there.
+  </p>
+  <p class="row">
+    {% for code in assets %}
+      <a class="btn {{ 'selected' if code == asset }}"
+         href="/customers/{{ customer_id }}/request-account?asset={{ code }}">{{ code }}</a>
+    {% else %}
+      <span class="muted">Discovery named no currency for this customer.</span>
+    {% endfor %}
+  </p>
+  {% for code, refusal in refused.items() %}
+    {# Named, not silently dropped: "why is EUR missing" is one click from
+       Conduit's own answer. #}
+    <p class="muted">
+      <a href="/customers/{{ customer_id }}/request-account?asset={{ code }}">{{ code }}</a>
+      — {{ refusal.title }}
+    </p>
+  {% endfor %}
+</div>
+
+{% if rm and not can_request_account %}
+  <p class="muted">Read-only: requesting an account needs the <code>account.request</code> permission.</p>
+{% elif rm %}
+  {% if rm.form_errors %}
+    <div class="problem" role="alert">
+      <strong>This request was not accepted</strong>
+      <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+    {# A rejected submit answers 422 with this same page re-rendered: `hx-select`
+     lifts its <main> out, so nothing but the page body is swapped — no second
+     copy of the scripts, and the CSRF headers on <body> survive. `hx-sync` +
+     `hx-disabled-elt` make a double-click one request, not two. #}
+  {# Minted per render — see OPERATIONS_SPEC §1. #}
+  <form id="wizard" hx-post="/customers/{{ customer_id }}/request-account"
+        hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="intent" value="{{ new_intent() }}">
+    <div id="root-fields">
+      {% for group in rm.groups %}
+        <section>
+          <h2>{{ group.title }}</h2>
+          {% for rf in group.fields %}{{ m.field(rf) }}{% endfor %}
+        </section>
+      {% endfor %}
+    </div>
+
+    {% if rm.documents or rm.min_documents %}
+      <h2>Documents</h2>
+      {{ m.documents(rm.documents) }}
+      {% if rm.min_documents %}<p class="muted">At least {{ rm.min_documents }} document(s) required.</p>{% endif %}
+      {% for message in rm.document_errors %}<div class="err" role="alert">{{ message.detail }}</div>{% endfor %}
+      {% call m.uploader(request) %}
+        <input type="file" data-upload data-purpose="{{ purpose }}" data-target="#doc-chips"
+               accept=".pdf,.png,.jpg,.jpeg">
+      {% endcall %}
+      <div id="doc-chips">
+        {% for doc_id in rm.document_ids %}
+          {% with field='documentIds', doc_id=doc_id, filename=doc_id %}{% include "onboarding/_chip.html" %}{% endwith %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <p class="row">
+      <button type="submit" class="primary">Request {{ asset }} account</button>
+      {{ m.working('Sending the request…') }}
+    </p>
+  </form>
+  <p class="muted">Schema version {{ model.schema_version }}, as discovery answered it just now.</p>
+{% endif %}
+{% endblock %}

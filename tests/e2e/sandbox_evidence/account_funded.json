@@ -1,0 +1,112 @@
+{
+  "activatedAt": "2026-08-31T03:26:32.955Z",
+  "asset": {
+    "code": "USD"
+  },
+  "balances": [
+    {
+      "available": {
+        "amount": "250.00",
+        "code": "USD"
+      },
+      "frozen": {
+        "amount": "0.00",
+        "code": "USD"
+      },
+      "pending": {
+        "amount": "0.00",
+        "code": "USD"
+      }
+    }
+  ],
+  "createdAt": "2026-08-31T03:26:32.570Z",
+  "depositInstructions": [
+    {
+      "accountNumber": "98009797521519606",
+      "bank": {
+        "address": "123 Sandbox Way, Testville, TS 00000",
+        "bic": "MOCKDEFFXXX",
+        "legalName": "Sandbox Mock Bank",
+        "postalAddress": {
+          "addressLine1": "123 Sandbox Way",
+          "city": "Testville",
+          "country": "US",
+          "postalCode": "00000",
+          "state": "TS"
+        }
+      },
+      "beneficiaryAddress": "ZZZTEST Console E2E addressLine1\nSofia, Sofia, 1000\nBGR",
+      "beneficiaryName": "ZZZTEST Sweep 1c66c5ce43 EOOD",
+      "beneficiaryPostalAddress": {
+        "addressLine1": "ZZZTEST Console E2E addressLine1",
+        "city": "Sofia",
+        "country": "BG",
+        "postalCode": "1000",
+        "state": "Sofia"
+      },
+      "currency": "USD",
+      "paymentReference": "98009797521519606",
+      "rails": [
+        {
+          "rail": "ach",
+          "routingNumber": "021000021",
+          "sameDayEligible": true
+        },
+        {
+          "rail": "fedwire",
+          "routingNumber": "021000021"
+        },
+        {
+          "fednowCap": "1000000.00",
+          "networks": [
+            "fednow"
+          ],
+          "rail": "rtp",
+          "routingNumber": "021000021"
+        }
+      ],
+      "type": "us_domestic"
+    },
+    {
+      "accountNumber": "98009797521519606",
+      "bank": {
+        "address": "123 Sandbox Way, Testville, TS 00000",
+        "bic": "MOCKDEFFXXX",
+        "legalName": "Sandbox Mock Bank",
+        "postalAddress": {
+          "addressLine1": "123 Sandbox Way",
+          "city": "Testville",
+          "country": "US",
+          "postalCode": "00000",
+          "state": "TS"
+        }
+      },
+      "beneficiaryAddress": "ZZZTEST Console E2E addressLine1\nSofia, Sofia, 1000\nBGR",
+      "beneficiaryName": "ZZZTEST Sweep 1c66c5ce43 EOOD",
+      "beneficiaryPostalAddress": {
+        "addressLine1": "ZZZTEST Console E2E addressLine1",
+        "city": "Sofia",
+        "country": "BG",
+        "postalCode": "1000",
+        "state": "Sofia"
+      },
+      "correspondent": {
+        "accountNumber": "00000000",
+        "address": "1 Test Plaza, New York, NY 10001, USA",
+        "bic": "TESTUS33XXX",
+        "name": "Sandbox Correspondent Bank"
+      },
+      "currency": "USD",
+      "paymentReference": "98009797521519606",
+      "rails": [
+        {
+          "rail": "swift"
+        }
+      ],
+      "type": "swift"
+    }
+  ],
+  "id": "vac_034GTiS4gzawZXXhZkOhLv",
+  "status": "active",
+  "updatedAt": "2026-08-31T03:26:32.955Z"
+}

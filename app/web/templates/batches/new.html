@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Batch payment · Conduit Console{% endblock %}
+{% block body %}
+{% call m.page_head('transact', 'Batch payment') %}
+  <a class="btn" href="/customers/{{ customer_id }}/batches">All batches</a>
+{% endcall %}
+
+{# **Demoted to a disclosure** (spec §4.5/addendum): the
+   corridor definition is the one sentence this page needs on every visit; the
+   purpose-column mechanism is a second teaching sentence and moves verbatim. #}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>.
+  A batch is a <strong>corridor</strong> — a rail and a recipient type — and one row per payment.
+  Recipients on the same corridor may be in any number of countries.
+</p>
+<details class="teaching">
+  <summary>What the purpose column does</summary>
+  <p class="muted">
+    The <code>purpose</code> is a column of the file, so one batch may
+    carry supplier payments and an intercompany move together.
+  </p>
+</details>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# The corridor row. Same machinery as the single payment's route row, minus
+   the purpose (a column every row picks for itself) and the destination
+   country (discovery's schema doesn't vary by it, and a batch's rows may
+   span any number of countries). #}
+<div class="bar">
+  <form id="route-row" class="row" method="get"
+        action="/customers/{{ customer_id }}/batches/new"
+        hx-get="/customers/{{ customer_id }}/batches/new"
+        hx-trigger="change" hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-push-url="true" hx-sync="this:replace" hx-indicator="#route-working">
+    <label>Rail
+      <select name="rail" required>
+        <option value="">—</option>
+        {% for value in rails %}
+          <option value="{{ value }}" {{ 'selected' if value == route.rail }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Recipient type
+      <select name="recipientType" required>
+        <option value="">—</option>
+        {% for value in recipient_types %}
+          <option value="{{ value }}" {{ 'selected' if value == route.recipient_type }}>{{ enum_option(value) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Funded from
+      {# One account for the whole batch: the operator approves a *total*, and
+         only the account states the currency that total is in. Disabled, not
+         hidden, where this rail cannot carry it. #}
+      <select name="virtualAccountId">
+        {% for item in accounts %}
+          <option value="{{ item.id }}" {{ 'disabled' if doomed_accounts.get(item.id) }}
+                  {{ 'selected' if account and item.id == account.id }}>
+            {{ item.id }} · {{ item.asset.code if item.asset else '' }}
+            {%- if doomed_accounts.get(item.id) %} — not on {{ route.rail }}{% endif %}
+          </option>
+        {% else %}
+          {# "there are none" and "we could not ask" are different facts, and
+             this select must not merge them — the same rule the payout and
+             transfer funding pickers keep. #}
+          <option value="">{{ 'virtual accounts could not be read' if accounts_problem
+                              else 'no active virtual account' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if not accounts and accounts_problem %}
+      <div class="err">
+        <strong>{{ accounts_problem.title }}</strong> — either Conduit could not be read, or the
+        accounts have changed status. This console cannot tell which, so it is <em>not</em> saying
+        this customer has none: reload before requesting an account.
+      </div>
+    {% endif %}
+    <button type="submit">Load requirements</button>
+    {{ m.working('Loading requirements…', 'route-working') }}
+  </form>
+  <p class="help">
+    Every column of the template comes from this corridor's live requirements.
+  </p>
+  {% for item in accounts if doomed_accounts.get(item.id) %}
+    {% if loop.first %}
+      <p class="help">
+        {{ rail_message.format(rail=route.rail, pinned=doomed_accounts[item.id],
+                               asset=item.asset.code if item.asset else '') }}
+      </p>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% if models %}
+  {# Both halves are plain HTTP: the download is a GET anchor, and the upload
+     posts the file's bytes to a route that answers with a redirect, so a refusal
+     lands as this page's own flash banner and a good file lands on the batch's
+     report. #}
+  <div class="bar">
+    <form class="row" action="/customers/{{ customer_id }}/batches" data-batch-upload>
+      <input type="hidden" name="rail" value="{{ route.rail }}">
+      <input type="hidden" name="recipientType" value="{{ route.recipient_type }}">
+      <input type="hidden" name="virtualAccountId" value="{{ account.id if account else '' }}">
+      <label>Blank template
+        <a class="btn" href="/customers/{{ customer_id }}/batches/template.csv?{{ query }}">Download template (CSV)</a>
+      </label>
+      {% if can_act %}
+        <label>Upload a filled template
+          <input type="file" accept=".csv,text/csv" data-batch>
+        </label>
+      {% endif %}
+      <span class="spacer"></span>
+      <a href="/customers/{{ customer_id }}/payouts/new">Send one payment instead</a>
+    </form>
+    <p class="help">
+      One payout per row, at most 500 rows, and a <code>purpose</code> column that takes the raw
+      key — <strong>the per-purpose detail is in the template's own header</strong>, above its
+      columns, so the file explains itself wherever it is opened. Nothing is sent by uploading:
+      the file is validated against this corridor's live requirements — every purpose read again,
+      never the snapshot the template was built from — and you get a per-row report with the
+      totals before anything can be dispatched. Unknown columns are refused rather than ignored.
+    </p>
+    {% if not can_act %}
+      <p class="muted">Read-only: uploading a batch needs the <code>batch.upload</code> permission.</p>
+    {% endif %}
+    <p class="err" data-batch-error hidden role="alert"></p>
+  </div>
+
+  {% if missing %}
+    <p class="muted">
+      Not available on this corridor: {% for purpose in missing %}<code class="raw">{{ purpose }}</code>{{ ', ' if not loop.last }}{% endfor %}.
+      Conduit answered with a problem for {{ 'each of these' if missing|length > 1 else 'this one' }},
+      so the template has no columns for {{ 'them' if missing|length > 1 else 'it' }} and a row
+      naming {{ 'one' if missing|length > 1 else 'it' }} is refused.
+    </p>
+  {% endif %}
+
+  {# The download is the verb and it is above this; the per-purpose reference is
+     a detail an operator needs ONCE. Native `<details>`, the house disclosure
+     (onboarding/start.html, m.attach_documents), closed. #}
+  <details>
+    <summary>What each purpose requires</summary>
+    <p class="muted">
+      The <code>purpose</code> column takes the <strong>raw key</strong> exactly as printed below —
+      the label beside it is for reading. Every row is validated against its own purpose's
+      requirements, and a row that fills a column another purpose declares is refused rather than
+      quietly dropped.
+    </p>
+    <div class="table-scroll">
+    <table>
+    <tr><th>Purpose</th><th>Value for the column</th><th>What that row needs</th></tr>
+    {% for purpose, model in models.items() %}
+      <tr>
+        <td>{{ enum_label(purpose) }}<div class="muted">{{ purpose_help.get(purpose, '') }}</div></td>
+        <td><code class="raw">{{ purpose }}</code></td>
+        <td>
+          {% if model.whitelist.required %}
+            <div>A <strong>registered whitelist recipient</strong> — put its <code>wlr_…</code> id
+              in the <code>contact</code> column; the coordinates come from Conduit's own record.</div>
+          {% else %}
+            <div class="muted">Recipient columns, or a saved contact's name in
+              <code>contact</code>.</div>
+          {% endif %}
+          {% if model.documentation.required %}
+            <div>A <strong>supporting document</strong> — attached once to the batch and riding
+              only with the rows whose purpose needs one.</div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+  </details>
+{% elif corridor %}
+  <p class="muted">No template can be built for this corridor.</p>
+{% else %}
+  <p class="muted">Pick a rail and a recipient type to see the template.</p>
+{% endif %}
+{% endblock %}

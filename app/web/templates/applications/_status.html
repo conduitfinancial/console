@@ -1,0 +1,52 @@
+{% import "macros.html" as m %}
+{# Auto-refreshes every 15s while the application is non-terminal. The trigger
+   lives on the fragment itself, so a terminal render simply stops polling. #}
+<div id="app-status" class="card"
+     hx-get="/applications/{{ application_id }}/status"
+     hx-swap="outerHTML"
+     {% if not terminal %}hx-trigger="every 15s"{% endif %}>
+  {% if problem %}
+    {{ m.problem(problem) }}
+  {% else %}
+    <div class="row">
+      {{ m.app_statuspill(application) }}
+      <span class="muted" {% if application.type %}title="{{ application.type }}"{% endif %}>{{ enum_label(application.type) }}</span>
+      {% if terminal %}<span class="muted">settled — live refresh stopped</span>
+      {% else %}<span class="muted">refreshing every 15s</span>{% endif %}
+    </div>
+    <div class="table-scroll">
+    <table>
+      <tr><th>Created</th><td>{{ application.createdAt|ts }}</td></tr>
+      <tr><th>Submitted</th><td>{{ application.submittedAt|ts }}</td></tr>
+      <tr><th>Updated</th><td>{{ application.updatedAt|ts }}</td></tr>
+      {% if application.clientReferenceId %}
+        <tr><th>Reference</th><td><code>{{ application.clientReferenceId }}</code></td></tr>
+      {% endif %}
+      {% if application.customerId %}
+        <tr><th>Customer</th>
+          <td><a href="/applications?customerId={{ application.customerId }}"><code>{{ application.customerId }}</code></a></td></tr>
+      {% endif %}
+    </table>
+    </div>
+
+    {% if application.status == 'rejected' %}
+      {# Warn-tinted when a corrected application will be considered, exception
+         when the decision is final — the same split the pill above makes, so the
+         status, the reason and the affordance read as one story rather than
+         three. `resubmittable` absent keeps the neutral exception box: which of
+         the two this is has not been established. The box itself is
+         `m.rejection` (shared with the quick-view drawer); only the *action*
+         lives here, because only this page has one. #}
+      {% call m.rejection(application) %}
+        {% if can_resubmit %}
+          <form hx-post="/applications/{{ application_id }}/resubmit">
+            <button type="submit" class="primary">Fix &amp; resubmit</button>
+            {{ m.working('Opening a corrected draft…') }}
+          </form>
+        {% endif %}
+      {% endcall %}
+    {% endif %}
+  {% endif %}
+
+  {% if operation %}{% include "operations/_panel.html" %}{% endif %}
+</div>

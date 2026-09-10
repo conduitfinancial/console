@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Review draft · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('onboarding', 'Review before submitting') }}
+<p class="muted lede">
+  Country {{ draft.country }} · draft <code>{{ draft.id }}</code>. This is the body that would be
+  sent to <code>POST /v2/onboarding</code>, assembled from the active fields only.
+</p>
+
+{% if not errors.ok %}
+  <div class="problem" role="alert">
+    <strong>Not ready to submit</strong>
+    <ul>
+      {% for name, messages in errors.fields.items() %}
+        {% for message in messages %}<li><code>{{ name }}</code>: {{ message.detail }}</li>{% endfor %}
+      {% endfor %}
+      {% for message in errors.documents %}<li>Documents: {{ message.detail }}</li>{% endfor %}
+      {% for message in errors.form %}<li>{{ message.detail }}</li>{% endfor %}
+    </ul>
+  </div>
+  <p><a class="btn" href="/onboarding/{{ draft.id }}">Back to the form</a></p>
+{% elif can_submit %}
+  <div class="row">
+    <form hx-post="/onboarding/{{ draft.id }}/submit"
+          hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+      {# One-use nonce (OPERATIONS_SPEC §1): re-POSTing this confirmation after a
+         lost redirect resolves to the submission it already made. #}
+      <input type="hidden" name="intent" value="{{ new_intent() }}">
+      {# A sealed hash of the answers this page is rendered from. `submit`
+         re-reads the draft and recomputes it: if anybody saved over the draft
+         between this render and the click, the hashes differ and the submission
+         is refused rather than sent under the reviewer's name. Minted by the GET,
+         so re-reading the page is what earns a fresh one. #}
+      <input type="hidden" name="reviewed" value="{{ reviewed }}">
+      <button type="submit" class="primary">Submit to Conduit</button>
+      {{ m.working('Submitting…') }}
+    </form>
+    <a class="btn" href="/onboarding/{{ draft.id }}">Back to the form</a>
+  </div>
+{% else %}
+  <p class="muted">Ready to submit. Submitting needs the <code>onboarding.submit</code> permission.</p>
+{% endif %}
+
+<h2>Assembled body</h2>
+<pre class="card" style="overflow:auto">{{ body | tojson(indent=2) }}</pre>
+{% endblock %}

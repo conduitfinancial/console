@@ -1,0 +1,61 @@
+{% import "macros.html" as m %}
+{# The capability badges, as facts.
+
+   Two stores, two capabilities, and a row may hold either or both — but a badge
+   is only ever written for a capability that EXISTS right now:
+
+   * "Saved for payouts" — this console holds the destination. Nothing else has
+     to be true.
+   * "Registered for intercompany payouts" — Conduit's answer is `registered`,
+     the only status a payout may name (`payments.USABLE_STATUS`). **Since
+     renamed this chip**: transfers moved to the `virtual_account` arm and gate
+     on nothing, so "Whitelisted for transfers" named a capability transfers no
+     longer use. The one flow that still requires it is an `intercompany` payout
+     to an external BANK destination, and the chip now says exactly that; the
+     `title` carries the fuller sentence. A registration under
+     review is not this: it is "Whitelisting", wearing Conduit's own status pill,
+     because the console must never render its own pending request as an active
+     capability. That distinction is the whole reason the two stores stay
+     visually apart until the review lands.
+
+   **"Whitelisting" is a gerund, so it only fits a registration that is still
+   happening**. On a `revoked` or `rejected` entry —
+   `projections.TERMINAL["whitelist_recipients"]`, asked through the `terminal`
+   global rather than re-listed here — nothing is in progress, and the word would
+   be describing a process that has stopped. The status pill speaks alone there,
+   with Conduit's reason under it where there is one.
+
+   `rejectionReason` rides along where Conduit gave one — a refused registration
+   whose reason is invisible is a row an operator cannot act on. #}
+{% macro badges(row, listed=true) %}
+<div class="row">
+  {% if row.saved %}<span class="chip">Saved for payouts</span>{% endif %}
+  {% if not listed %}
+    {# Three states, not two. With the whitelist
+       unread, the *absence* of the badge is not "not whitelisted" — it is the
+       console not having been able to ask, and rendering the two the same way
+       lets a failed read be read as a compliance fact. #}
+    <span class="muted">Whitelist status unknown</span>
+  {% elif row.ambiguous %}
+    {# No capability is claimed for a destination two saved records share: the
+       registration belongs to one of them and nothing here can say which. #}
+    <span class="muted">Whitelist status not attributable</span>
+  {% elif row.entry %}
+    {% if row.entry.status == 'registered' %}
+      <span class="chip" title="Conduit's registered record of this destination — required when an intercompany payout names an external bank account.">Registered for intercompany payouts</span>
+    {% else %}
+      {% if not terminal('whitelist_recipients', row.entry.status) %}
+        <span class="muted">Whitelisting</span>
+      {% endif %}
+      {{ m.statuspill('whitelist_recipients', row.entry.status) }}
+    {% endif %}
+  {% endif %}
+</div>
+{% if row.ambiguous %}
+  <div class="muted">{{ row.ambiguous }} saved contacts share these coordinates — rename or
+    archive all but one, and this row can carry a capability again.</div>
+{% endif %}
+{% if row.entry and row.entry.rejectionReason %}
+  <div class="muted">{{ row.entry.rejectionReason }}</div>
+{% endif %}
+{% endmacro %}

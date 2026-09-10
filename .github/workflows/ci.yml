@@ -1,0 +1,205 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `tests/conftest.py` os.environ.setdefault()s everything else it needs, so
+  # this is the only value CI has to supply.
+  DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/conduit_console_test
+
+jobs:
+  # 1. Everything compiles, and the two condition evaluators still agree. The
+  #    parity test shells out to node, so it is a real cross-language gate; it
+  #    needs Postgres only because the session fixture builds the schema.
+  lint:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
+        # GitHub Actions service-container images, so this needs a manual bump
+        # alongside deploy/docker-compose.yml's postgres pin.
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: conduit_console_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups --frozen
+      - name: Byte-compile every module
+        run: uv run python -m compileall -q app alembic scripts tests
+      - name: Condition-vector parity (Python ≡ static/conditions.js)
+        run: uv run pytest -q tests/test_forms.py -k condition_vectors
+
+  # 2. The unit + contract + integration suites, against a real Postgres.
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
+        # GitHub Actions service-container images, so this needs a manual bump
+        # alongside deploy/docker-compose.yml's postgres pin.
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: conduit_console_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups --frozen
+      - name: pytest (everything except the browser suite)
+        run: uv run pytest -q --ignore=tests/browser
+
+  # 3. The browser journeys. Split from `tests` so a chromium problem is
+  #    obviously a chromium problem, and so the ~120 MB download is not on the
+  #    critical path of the fast suite.
+  browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
+        # GitHub Actions service-container images, so this needs a manual bump
+        # alongside deploy/docker-compose.yml's postgres pin.
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: conduit_console_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups --frozen
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q tests/browser
+
+  # 4. Has Conduit's published spec moved under us?
+  #
+  #    Reported, never blocking: the drift this checks for is a change on
+  #    *their* side, so a red X here would mean an unrelated PR cannot merge
+  #    because a third party edited an OpenAPI document overnight — which
+  #    teaches everyone to ignore the light. The check's whole value is the
+  #    diff in the log, which `continue-on-error` still prints; acting on it
+  #    (re-pinning `contracts/openapi_production.json`, adjusting the parsers)
+  #    is deliberate work with its own PR. The behaviour the app must have when
+  #    the spec *has* moved — unknown enums rendering neutrally, schema-version
+  #    mismatches refusing to render — is enforced by the blocking suites above.
+  openapi-drift:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups --frozen
+      - name: Compare the pinned snapshot with the live spec
+        run: uv run python scripts/check_openapi_drift.py
+
+  # 5. The image builds, and both of its commands start.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build
+        run: docker build -t conduit-console:ci .
+      - name: Environment for the container smokes
+        run: |
+          # One throwaway set of valid-shaped secrets in an env file — not a
+          # string of -e flags, which only word-splits in some shells.
+          cat > /tmp/smoke.env <<EOF
+          CONDUIT_ENV=sandbox
+          AUTH_MODE=proxy
+          COOKIE_SECURE=false
+          PROXY_SHARED_SECRET=$(openssl rand -hex 24)
+          SESSION_SECRET=$(openssl rand -hex 32)
+          ENCRYPTION_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+          DATABASE_URL=postgresql+psycopg://nobody@127.0.0.1:5432/none
+          EOF
+      - name: "`web` answers /health/live"
+        run: |
+          docker run -d --name smoke --env-file /tmp/smoke.env -p 8000:8000 conduit-console:ci web
+          for _ in $(seq 30); do
+            curl -fsS http://127.0.0.1:8000/health/live && break || sleep 1
+          done
+          # A dead container's logs go with the container, so dump them first.
+          if ! curl -fsS http://127.0.0.1:8000/health/live | grep -q '"status":"ok"'; then
+            echo "::group::docker logs smoke"
+            docker logs smoke 2>&1 | tail -50
+            echo "::endgroup::"
+            exit 1
+          fi
+          docker rm -f smoke
+      - name: "`worker` starts and stops on SIGTERM"
+        run: |
+          # No database, so every pass fails — the give-up limit is put out of
+          # the way here so this step is only about start and signal.
+          docker run -d --name worker-sigterm --env-file /tmp/smoke.env \
+            -e WORKER_MAX_FAILED_PASSES=100000 conduit-console:ci worker
+          sleep 5
+          docker logs worker-sigterm 2>&1 | grep -q 'worker started'
+          docker stop -t 20 worker-sigterm
+          test "$(docker inspect -f '{{.State.ExitCode}}' worker-sigterm)" = "0"
+          docker rm -f worker-sigterm
+      - name: "`worker` exits non-zero after consecutive failed passes"
+        run: |
+          # The restart-policy contract (deploy/README §4): a worker that cannot
+          # reach its database must die, not sit there looking healthy. The
+          # inbox loop ticks once a second, so three failures take ~3s.
+          docker run -d --name worker-giveup --env-file /tmp/smoke.env \
+            -e WORKER_MAX_FAILED_PASSES=3 conduit-console:ci worker
+          for _ in $(seq 30); do
+            [ "$(docker inspect -f '{{.State.Running}}' worker-giveup)" = "false" ] && break || sleep 1
+          done
+          docker logs worker-giveup 2>&1 | grep -q 'consecutive passes'
+          test "$(docker inspect -f '{{.State.ExitCode}}' worker-giveup)" = "1"
+          docker rm -f worker-giveup
+      - name: The compose reference parses
+        run: docker compose -f deploy/docker-compose.yml config >/dev/null
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-real-password
+
+  # 6. Known vulnerabilities in what actually ships. The export is `--no-dev`,
+  #    so a CVE in pytest or playwright cannot fail a build over code that is
+  #    not in the image; pip-audit itself is run with `uvx`, i.e. it is not a
+  #    dependency of this project at all.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+      - name: Export the runtime dependency set
+        run: uv export --no-dev --no-emit-project --format requirements-txt > runtime-requirements.txt
+      - name: Audit it
+        run: uvx pip-audit --disable-pip --no-deps -r runtime-requirements.txt

@@ -1,0 +1,61 @@
+{
+  "activatedAt": "2026-08-28T21:47:22.589Z",
+  "asset": {
+    "code": "EUR"
+  },
+  "balances": [
+    {
+      "available": {
+        "amount": "859.82",
+        "code": "EUR"
+      },
+      "frozen": {
+        "amount": "0.00",
+        "code": "EUR"
+      },
+      "pending": {
+        "amount": "0.00",
+        "code": "EUR"
+      }
+    }
+  ],
+  "createdAt": "2026-08-28T21:47:22.277Z",
+  "depositInstructions": [
+    {
+      "bank": {
+        "address": "123 Sandbox Way, Testville, TS 00000",
+        "bic": "MOCKDEFFXXX",
+        "legalName": "Sandbox Mock Bank",
+        "postalAddress": {
+          "addressLine1": "123 Sandbox Way",
+          "city": "Testville",
+          "country": "US",
+          "postalCode": "00000",
+          "state": "TS"
+        }
+      },
+      "beneficiaryAddress": "ZZZTEST Console E2E addressLine1\nSofia, Sofia, 1000\nBGR",
+      "beneficiaryName": "ZZZTEST Console SBX A2 EOOD",
+      "beneficiaryPostalAddress": {
+        "addressLine1": "ZZZTEST Console E2E addressLine1",
+        "city": "Sofia",
+        "country": "BG",
+        "postalCode": "1000",
+        "state": "Sofia"
+      },
+      "bic": "MOCKDEFFXXX",
+      "currency": "EUR",
+      "iban": "DE24000000003929400570",
+      "paymentReference": "DE24000000003929400570",
+      "rails": [
+        {
+          "rail": "sepa"
+        }
+      ],
+      "type": "sepa"
+    }
+  ],
+  "id": "vac_034FCiLdKtpwHn33PX9h13",
+  "status": "active",
+  "updatedAt": "2026-08-28T21:47:22.589Z"
+}

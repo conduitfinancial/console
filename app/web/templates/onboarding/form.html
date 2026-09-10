@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Draft {{ draft.country }} · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('onboarding', 'Onboarding draft', mono=draft.country,
+   sentence="Rendered from this draft's own pinned requirements snapshot (schema version "
+            ~ model.schema_version ~ "). Discovery may have moved on; this draft has not.") }}
+
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+{% if rm.form_errors %}
+  <div class="problem" role="alert">
+    <strong>This submission was not accepted</strong>
+    <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
+<div class="wizard-layout">
+{# Section ids are positional, not slugged: `group.key` may be null and two
+   snapshots may title-collide, while `loop.index` is stable within a render —
+   which is all an in-page anchor has to be. The counts are filled in by
+   static/app.js from what conditions.js has already decided.
+
+   The same list is the wizard's stepper (QA F-001): static/app.js shows one
+   section at a time and these entries are how an operator moves between them —
+   in any order, never a funnel. Without JS every anchor still does what it
+   always did, because every section is still on the page. #}
+<nav id="wizard-nav" aria-label="Form sections">
+  {# What the number beside each entry counts. "People 15" reads as fifteen
+     people otherwise (QA F-001) — it is fifteen answers still owed. #}
+  <p class="micro-label">Steps — required fields left</p>
+  <ol>
+    {% for group in rm.groups %}
+      <li><a href="#sect-{{ loop.index }}">{{ group.title }}<span class="count" data-count-for="sect-{{ loop.index }}"></span></a></li>
+    {% endfor %}
+    <li><a href="#sect-people">People<span class="count" data-count-for="sect-people"></span></a></li>
+    <li><a href="#sect-documents">Documents<span class="count" data-count-for="sect-documents"></span></a></li>
+  </ol>
+  <p class="total" id="wizard-total"></p>
+  {# The submit lives at the foot of the last step, so from step 1 it is three
+     screens away and out of sight. This is the way back to it from anywhere —
+     an anchor to the last section, which is exactly where the button is. #}
+  {% if can_edit %}
+    <p class="nav-submit"><a href="#sect-documents">Go to review &amp; submit</a></p>
+  {% endif %}
+</nav>
+
+<form id="wizard" {% if can_edit %}hx-post="/onboarding/{{ draft.id }}/review"
+      hx-sync="this:drop" hx-disabled-elt="find button[type=submit]"{% endif %}>
+  {% if can_edit %}
+    {# The autosave says so at the top of the form, where the operator looks
+       before they leave, not at the bottom next to the submit — a save state
+       read only on the way out is a save state read too late. It stays *inside*
+       the form on purpose: `hx-trigger="change from:#wizard"` listens on the
+       form wherever this sits, and `hx-include="#wizard"` names its scope
+       explicitly, but keeping it in there means no future move can quietly take
+       the posted body away from it. Every attribute below is load-bearing and
+       verbatim — the `hx-sync` queue is what stops an in-flight autosave from
+       swallowing the submit (pinned by a literal assertion in the suite).
+
+       `hx-disabled-elt` is INHERITED, exactly as `hx-sync` is: without the
+       override below this span resolved the form's `find button[type=submit]`
+       against its own subtree, found nothing, and htmx logged
+       "…returned no matches!" on every autosave (QA F-004). `this` disables the
+       span itself for the length of its own request — nothing else on the page,
+       and never the operator's submit. #}
+    <p class="save-status row">
+      <span id="save-state" class="muted" hx-sync="this:replace" hx-disabled-elt="this"
+            hx-post="/onboarding/{{ draft.id }}/save"
+            hx-trigger="change from:#wizard delay:800ms, draft-changed from:body"
+            hx-include="#wizard">Not saved yet</span>
+      {# Not "every change is kept": this line is static markup and cannot know
+         whether the last save landed, so it must be true even while one has
+         failed. It points at the pill, which does know. #}
+      <span class="muted">Saved changes are kept — wait for Saved before leaving.</span>
+    </p>
+  {% endif %}
+  <div id="root-fields">
+    {% for group in rm.groups %}
+      <section id="sect-{{ loop.index }}" class="form-section">
+        <h2>{{ group.title }}</h2>
+        {% for rf in group.fields %}{{ m.field(rf) }}{% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+
+  <section id="sect-people" class="form-section">
+    <h2>People</h2>
+    {% include "onboarding/_persons.html" %}
+  </section>
+
+  <section id="sect-documents" class="form-section" data-min-docs="{{ rm.min_documents or 0 }}">
+    <h2>Documents</h2>
+    {{ m.documents(rm.documents) }}
+    {% if rm.min_documents %}<p class="muted">At least {{ rm.min_documents }} document(s) required.</p>{% endif %}
+    {% for message in rm.document_errors %}<div class="err" role="alert">{{ message.detail }}</div>{% endfor %}
+    {% if can_edit %}
+      {% call m.uploader(request) %}
+        <input type="file" data-upload data-purpose="{{ purpose }}" data-draft="{{ draft.id }}"
+               data-target="#doc-chips" accept=".pdf,.png,.jpg,.jpeg">
+      {% endcall %}
+    {% endif %}
+    <div id="doc-chips">
+      {% for doc_id in rm.document_ids %}
+        {% with field='documentIds', doc_id=doc_id, filename=doc_id %}{% include "onboarding/_chip.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if can_edit %}
+    {# Rendered here, at the end of the form, and MOVED by static/app.js into the
+       foot of the last step — the same node with the same attributes, never a
+       second button. With no JS it stays where it is, under the whole form,
+       which is where it has always been. #}
+    <p class="row" id="wizard-submit">
+      <button type="submit" class="primary">Review &amp; submit</button>
+      {{ m.working('Checking the draft…') }}
+    </p>
+  {% else %}
+    <p class="muted">Read-only: filling in a draft needs the <code>onboarding.edit</code> permission.</p>
+  {% endif %}
+</form>
+</div>
+
+{% if can_edit %}
+<form class="row" hx-post="/onboarding/{{ draft.id }}/discard">
+  <button type="submit" class="danger">Discard this draft</button>{{ m.working() }}
+  <span class="muted">
+    Deletes this draft and every answer in it. Nothing already submitted to Conduit is affected.
+  </span>
+</form>
+{% endif %}
+{% endblock %}

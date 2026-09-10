@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Customers · Conduit Console{% endblock %}
+{% block body %}
+{# The "Start an onboarding" primary this head once carried is
+   gone (2026-09-02). The own rule was that the pill answers
+   "and what do I do about it" — and about a directory of customers Conduit has
+   already approved, starting a *different* onboarding is not that answer; it
+   was the nearest verb, not this page's own. The chrome cluster carries it now.
+   The empty state keeps its link, because "a customer exists once Conduit
+   approves an application" is the sentence that explains the emptiness. #}
+{{ m.page_head('customers', 'Customers',
+   'Every customer this organization holds at Conduit, as Conduit lists them.') }}
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{# Customers carry no status of their own — the dashboard tracks application
+   status — so the filters are the ones the endpoint offers. #}
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/customers" class="bar row"
+      hx-get="/customers" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <input type="hidden" name="limit" value="{{ limit }}">
+  {# Console-side, not a Conduit parameter — the paragraph below says which. #}
+  <label>Name <input type="text" name="name" value="{{ search_name }}" placeholder="acme"></label>
+  <label>Reference <input type="text" name="clientReferenceId" value="{{ reference }}"
+                          placeholder="your own id"></label>
+  <label>Type
+    <select name="type">
+      <option value="">any</option>
+      {# Label first, wire value after — and nothing but capitalisation between
+         them for a one-word type, where `enum_option` drops the raw half rather
+         than repeat it (QA F-002). #}
+      {% for value in types %}
+        <option value="{{ value }}" {{ 'selected' if value in selected_types }}>{{ enum_option(value) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/customers">Reset</a>
+</form>
+
+{# `GET /v2/customers` takes `clientReferenceId` and `type` and nothing else —
+   no `search`, no name. Rather than fake a server filter this page cannot
+   perform, say so: the rows below are the only place a name is matched,
+   and it is matched by eye. Applications' own Search was probed for this
+   (sandbox, 2026-08-29) and matches only an exact client reference, so it is
+   not the shortcut it looks like and is not offered as one.
+
+   **Demoted to a disclosure**. Which half of
+   this bar is Conduit's and which is the console's own bounded walk is a fact
+   an operator needs once, and it sat above the rows on every visit. The lede
+   in the head above is the page's one sentence; these two are one click away,
+   verbatim — not rewritten and not deleted, because a bounded search
+   presenting itself as a complete one is this page's worst failure and this
+   is the paragraph that prevents it. The two sentences that state the search
+   *actually run* — the cap warning and the "this is the whole answer"
+   confirmation below — are not teaching prose and stay on the page. #}
+<details class="teaching">
+  <summary>Which of these filters are Conduit's</summary>
+  <p class="muted">
+    Conduit lists customers without a name search, so <strong>Name</strong> is this console's own:
+    it reads the list — carrying the filters beside it — and matches
+    <em>legal name</em>, <em>trade name</em>, an individual's names <em>and the customer id</em> —
+    a partial <code>cus_…</code> works — case-insensitively, up to
+    the first {{ walk_pages }} customers. Reference and Type are Conduit's and are sent as filters.
+  </p>
+</details>
+
+{% if search_name %}
+  {% if name_capped %}
+    {# A capped search presented as a complete one is the failure this sentence
+       exists to prevent. #}
+    <div class="problem warn" role="status">
+      <strong>This search stopped at {{ walk_pages }} customers</strong>
+      <p>
+        It searched the first {{ walk_pages }} customers and stopped there, so a match past that
+        point is not below. Refine the search, add the Type filter, or use the customer's
+        reference id — that one is Conduit's own lookup and reads the whole list.
+      </p>
+    </div>
+  {% elif not problem %}
+    <p class="muted">
+      Searched every customer Conduit lists{% if selected_types %} of the selected type{% endif %}
+      and matched “{{ search_name }}” — this is the whole answer, not a page of it.
+    </p>
+  {% endif %}
+{% endif %}
+
+{{ m.result_meta(request, page.items|length, 'customer', problem=problem,
+                 total=page.total, per_page=limit, export=export_url(request, 'customers')) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Customer</th><th>Customer ID</th><th>Type</th><th>Created</th><th></th></tr>
+  {% for item in page.items %}
+    <tr>
+      {# Name and id are SEPARATE columns on this page (
+         2026-09-02) — the directory is where an operator copies ids out, and a
+         column selects cleaner than a stacked cell. Name first and linked;
+         the id mono in its own column. `display_name` reads straight off the
+         DTO with the console's one fallback chain; a customer with no
+         renderable name shows the id in BOTH columns rather than a blank
+         first cell (never an empty identity). #}
+      <td><a href="/customers/{{ item.id }}">{{ display_name(item) }}</a></td>
+      <td><code class="num">{{ item.id }}</code></td>
+      <td>{{ item.type or '—' }}</td>
+      <td>{{ item.createdAt|ts }}</td>
+      <td><a href="/applications?customerId={{ item.id }}">Applications</a></td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts; the count
+       above already refuses to merge them, and so must the row that replaces
+       the rows (recipients/list.html is the house model). #}
+    <tr><td colspan="5" class="muted">
+      {% if problem %}The list could not be read — see above.
+      {% else %}No customers on this page. A customer exists once Conduit approves an application —
+      <a href="/onboarding">start an onboarding</a>, or widen the filters above.{% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{{ m.table_foot(pager) }}
+{% endblock %}

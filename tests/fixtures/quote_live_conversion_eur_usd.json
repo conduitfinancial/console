@@ -1,0 +1,54 @@
+{
+  "amount": {
+    "amount": "1000.00",
+    "code": "EUR"
+  },
+  "createdAt": "2026-08-28T20:19:21.786Z",
+  "destinationAssetRef": {
+    "code": "USD"
+  },
+  "expiresAt": "2026-08-28T20:24:21.786Z",
+  "id": "qte_034FAYRKDQZJCcT5VP2rL8",
+  "lockSide": "source",
+  "options": [
+    {
+      "destinationAmount": {
+        "amount": "1154.38",
+        "code": "USD"
+      },
+      "fees": [
+        {
+          "assetAmount": {
+            "amount": "1.00",
+            "code": "EUR"
+          },
+          "charge": "conversion",
+          "owner": "conduit",
+          "type": "fixed"
+        }
+      ],
+      "id": "qop_034FAYRNQuWRBL8w7S7SNw",
+      "rail": null,
+      "rate": {
+        "endUserRate": "1.155533925",
+        "referenceRate": "1.15843",
+        "totalSpreadBps": "25"
+      },
+      "recipientAmount": {
+        "amount": "1154.38",
+        "code": "USD"
+      },
+      "sourceAmount": {
+        "amount": "999.00",
+        "code": "EUR"
+      },
+      "totalDebit": {
+        "amount": "1000.00",
+        "code": "EUR"
+      }
+    }
+  ],
+  "sourceAssetRef": {
+    "code": "EUR"
+  }
+}

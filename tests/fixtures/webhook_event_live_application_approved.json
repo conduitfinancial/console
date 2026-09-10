@@ -1,0 +1,13 @@
+{
+  "apiVersion": "2",
+  "createdAt": "2026-08-28T21:44:39.864Z",
+  "data": {
+    "applicationId": "app_034FCeBVXZdRabCH7fFEvi",
+    "applicationType": "customer_onboarding",
+    "clientReferenceId": "dc9a7092-7b3d-4a34-b4bc-4e60192780f9",
+    "customerId": "cus_034FCeDANniGVBQX8P3qoV"
+  },
+  "id": "evt_034FCeEH0XxVW2z78S1ObQ",
+  "mode": "sandbox",
+  "type": "application.approved"
+}

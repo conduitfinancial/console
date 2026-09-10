@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Whitelist a destination · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('customer', 'Whitelist a destination') }}
+{# **Demoted to a disclosure** (spec §4.5/addendum): three
+   sentences past the one that says what registering is FOR — the transfer
+   exception, the review step and the pointer to the Contacts page are all
+   true on every visit and none is what this page is. Moved verbatim. #}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>. Registering a
+  destination with Conduit is what gives a contact its <em>registered for intercompany payouts</em>
+  capability: an <code>intercompany</code> payout to a <strong>bank</strong> account is refused
+  without one, and only <strong>registered</strong> destinations can be named on a payout.
+</p>
+<details class="teaching">
+  <summary>What registering doesn't cover</summary>
+  <p class="muted">
+    It is
+    not what a <a href="/customers/{{ customer_id }}/transfers/new">transfer</a> between two Conduit
+    accounts needs — that arm names the destination account directly and gates on nothing.
+    Conduit reviews every registration first. The customer's existing destinations are on
+    their <a href="/customers/{{ customer_id }}/contacts">Contacts page</a>, which is also where a
+    registration's status is explained.
+  </p>
+</details>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{% if not can_act %}
+  <p class="muted">Read-only: registering a destination needs the <code>whitelist.register</code> permission.</p>
+{% else %}
+  <div class="card">
+    <strong>Whitelist another customer's account</strong>
+    <p class="help">
+      Paste the other customer's id and the id of one of their <em>active</em> virtual accounts.
+      The bank coordinates are read off that account's own deposit instructions and the
+      relationship is set to <code>group_entity</code> — you still confirm the legal name, and
+      Conduit still reviews the registration.
+    </p>
+    <form method="get" action="/customers/{{ customer_id }}/recipients" class="row">
+      <label>Target customer <input type="text" name="target" placeholder="cus_…"
+             value="{{ shortcut.target.customer_id if shortcut.target else '' }}" required></label>
+      <label>Their virtual account <input type="text" name="account" placeholder="vac_…"
+             value="{{ shortcut.target.account_id if shortcut.target else '' }}" required></label>
+      <button type="submit">Prefill</button>
+    </form>
+    {% if shortcut %}
+      {# Reached through the shortcut: say plainly what is about to be registered
+         onto whose whitelist, why the relationship is what it is, and what
+         Conduit does next. The form below is otherwise a page of bank fields
+         with no statement of whose they are. #}
+      <div class="problem wait" role="status">
+        <strong>Registering another customer's account onto this customer's whitelist</strong>
+        <p>
+          Account <code>{{ shortcut.target.account_id }}</code> of customer
+          <a href="/customers/{{ shortcut.target.customer_id }}"><code>{{ shortcut.target.customer_id }}</code></a>
+          is being registered as a destination
+          <strong>customer <code>{{ customer_id }}</code> may pay</strong>. The coordinates below
+          were read from that account's own deposit instructions as a
+          <code>{{ shortcut.rail }}</code> recipient, and they are read again when you submit — what
+          reaches Conduit is that fresh read, not what this form holds.
+        </p>
+        <p>
+          The relationship is <code>group_entity</code> because the account provably belongs to a
+          different customer of this organization; <code>self</code> is for the customer's own
+          accounts. Conduit reviews the registration: it lands
+          <code>pending_review</code> and becomes <code>registered</code> — only then can it be
+          paid.{% if is_sandbox() %} On sandbox you can simulate that decision from the Contacts
+          page.{% endif %}
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if contact %}
+    {# The bridge from a saved contact — the shortcut in
+       reverse, and it states its own boundaries for the same reason. What it
+       can prove: these are the coordinates this console stored for this
+       customer's contact, re-read at submit. What it cannot: whose account it
+       is. So `relationship` is a question here, not a conclusion. #}
+    <div class="problem wait" role="status">
+      <strong>Whitelisting the saved contact “{{ contact.contact.label }}”</strong>
+      <p>
+        The coordinates below are the ones this console stored for that contact
+        (<code>{{ contact.contact.id }}</code>), on the <code>{{ contact.rail }}</code> rail it was
+        saved for. They are read again from that record when you submit — what reaches Conduit is
+        that fresh read, not what this form holds, so editing a coordinate here changes nothing.
+        Edit the contact on the <a href="/customers/{{ customer_id }}/contacts">Contacts page</a>,
+        or register a different destination by hand.
+      </p>
+      <p>
+        <strong>The relationship is yours to answer.</strong> A saved contact is a destination this
+        customer has paid; that is no evidence of who owns the account. Pick
+        <code>self</code> only for an account this customer owns elsewhere.
+        Conduit reviews the registration either way: it lands <code>pending_review</code> and the
+        contact keeps only its <em>saved for payouts</em> capability until the review passes.
+      </p>
+    </div>
+  {% endif %}
+
+  <p class="row">
+    {% for option in rails %}
+      <a class="btn {{ 'selected' if option == rail }}"
+         href="/customers/{{ customer_id }}/recipients?rail={{ option }}">{{ option }}</a>
+    {% endfor %}
+  </p>
+
+  {% if rm.form_errors %}
+    <div class="problem" role="alert">
+      <strong>This registration was not accepted</strong>
+      <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  {# A refused submit answers 422 with this page re-rendered; `hx-select` lifts its
+     <main> out so the scripts are not duplicated, and `hx-sync` makes a
+     double-click one request rather than two registrations. #}
+  <form id="wizard" hx-post="/customers/{{ customer_id }}/recipients"
+        hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="intent" value="{{ new_intent() }}">
+    <input type="hidden" name="rail" value="{{ rail }}">
+    {# The shortcut's and the bridge's own inputs travel with the submission: the
+       server re-reads that account (or that contact) and writes its coordinates
+       onto the body, so what is registered is the stored record rather than
+       these fields. #}
+      <input type="hidden" name="target" value="{{ shortcut.target.customer_id if shortcut.target else '' }}">
+      <input type="hidden" name="account" value="{{ shortcut.target.account_id if shortcut.target else '' }}">
+      <input type="hidden" name="contact" value="{{ contact.contact.id if contact else '' }}">
+    <div id="root-fields">
+      {% for group in rm.groups %}
+        {% for rf in group.fields %}
+          {% if sealed.get(rf.name) %}
+            {# A server-owned coordinate: the POST re-reads the stored record and
+               overwrites whatever the browser sends, so this is a *statement of
+               what will be registered*, not a field. Masked by the console's one
+               policy — the masking rule's form-input exception covers what an
+               operator types, and nobody types this. #}
+            <div class="field">
+              <label>{{ rf.field.label }}</label>
+              <div class="num">{{ sealed[rf.name] }}</div>
+              {# A refusal aimed at a sealed field still has to be READ. Sealing
+                 hides the input, not the reason — dropping these would let
+                 Conduit reject a registration over a stored coordinate while the
+                 page showed only a generic problem card, and the operator's next
+                 move (fix it on the contact) would be unguessable. #}
+              {% for message in rf.errors %}<div class="err" role="alert">{{ message.detail }}</div>{% endfor %}
+            </div>
+          {% else %}{{ m.field(rf) }}{% endif %}
+        {% endfor %}
+      {% endfor %}
+      {% if sealed %}
+        <p class="help">
+          The coordinates above are read from the stored record when you submit — they are shown
+          masked and cannot be edited here, because editing them would change nothing.
+        </p>
+      {% endif %}
+    </div>
+
+    <h3>Evidence *</h3>
+    <p class="help">
+      Ownership documents, a bank verification letter — whatever evidences the relationship.
+      Conduit requires <strong>at least one</strong> on every registration, a
+      <code>self</code> one included (verified live: an empty
+      <code>evidenceDocumentIds</code> is refused).
+    </p>
+    {% for message in rm.document_errors %}<div class="err" role="alert">{{ message.detail }}</div>{% endfor %}
+    {% call m.uploader(request) %}
+      <input type="file" data-upload data-purpose="{{ purpose }}" data-target="#doc-chips"
+             accept=".pdf,.png,.jpg,.jpeg">
+    {% endcall %}
+    <div id="doc-chips">
+      {% for doc_id in rm.document_ids %}
+        {% with field='documentIds', doc_id=doc_id, filename=doc_id %}{% include "onboarding/_chip.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+
+    <p class="row">
+      <button type="submit" class="primary">Register {{ rail }} destination</button>
+      {{ m.working('Registering…') }}
+    </p>
+  </form>
+{% endif %}
+{% endblock %}

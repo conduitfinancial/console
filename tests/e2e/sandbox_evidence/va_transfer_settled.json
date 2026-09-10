@@ -1,0 +1,35 @@
+{
+  "_note": "sandbox began settling the virtual-account arm 2026-09-01 ~20:00 UTC; probe exit 2",
+  "_observed_at": "2026-09-01T20:20Z",
+  "clientReferenceId": "ZZZTEST-vaprobe-4b2b29d4c7",
+  "completedAt": "2026-09-01T20:14:04.387Z",
+  "createdAt": "2026-09-01T20:13:56.482Z",
+  "customerId": "cus_034FCeDANniGVBQX8P3qoV",
+  "customerName": "ZZZTEST Console SBX A2 EOOD",
+  "destination": {
+    "assetAmount": {
+      "amount": "1.00",
+      "code": "USD"
+    },
+    "type": "virtual_account",
+    "virtualAccountId": "vac_034FClZQ2SjTWTH9yBxxky"
+  },
+  "fees": [],
+  "hasRfi": false,
+  "id": "txn_034HRmGsnk0798PRyU7zUE",
+  "purpose": "intercompany",
+  "remittance": {
+    "reference": "ZZZTEST-VA-PROBE"
+  },
+  "requiresUserSignature": false,
+  "source": {
+    "assetAmount": {
+      "amount": "1.00",
+      "code": "USD"
+    },
+    "type": "virtual_account",
+    "virtualAccountId": "vac_034FCiCByMrhNurskZcYDB"
+  },
+  "status": "completed",
+  "type": "withdrawal"
+}

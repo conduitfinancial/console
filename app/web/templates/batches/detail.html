@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Batch payout · Conduit Console{% endblock %}
+{% block body %}
+{% call m.page_head('transact', 'Batch payout', mono=batch.id|string) %}
+  <a class="btn" href="/customers/{{ customer_id }}/batches">All batches</a>
+{% endcall %}
+
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a> ·
+  <code>{{ batch.filename }}</code>, uploaded by {{ batch.actor_email }} {{ batch.created_at|ts }}.
+  Every row below was validated against <strong>this route's live requirements</strong>, read when
+  the file was uploaded — not against the snapshot the template was built from.
+</p>
+
+<div class="card">
+  <p class="row">
+    {# The corridor is the batch's; the purposes are the rows'. Listing the ones
+       this file actually holds beats naming a single purpose the batch no longer
+       has. #}
+    <span class="btn selected">{{ batch.rail }}</span>
+    <span class="muted">
+      {{ batch.recipient_type }} recipient
+      {%- if batch.destination_country %} · destination
+      {{ batch.destination_country }}{% if country_name(batch.destination_country) %} — {{ country_name(batch.destination_country) }}{% endif %}
+      {%- endif %}
+    </span>
+    <span class="spacer"></span>
+    {{ m.statuspill('payout_batches', batch.status) }}
+  </p>
+  <p class="row">
+    <span class="muted">Purposes in this file:</span>
+    {% for purpose, count in purposes %}
+      <span class="chip">{{ enum_label(purpose) or '(none)' }} · {{ count }}</span>
+      <code class="raw">{{ purpose }}</code>
+    {% endfor %}
+  </p>
+  <p class="muted">
+    Funded from <code>{{ batch.virtual_account_id }}</code> ({{ batch.asset }}) — the account's own
+    currency is the currency of the totals below.
+  </p>
+</div>
+
+{# The drift sentinel. Not a refusal: the rows were
+   revalidated against fresh discovery either way, and this says the file was
+   built against something else. #}
+{% if stale %}
+  <div class="problem warn" role="alert">
+    <strong>The template this file was built from is out of date</strong>
+    <div>
+      Conduit's requirements for this route have changed since the template was downloaded, so the
+      rows below were validated against the <strong>current</strong> ones. Nothing was silently
+      accepted — but a column that has since become required, or a value that has stopped being
+      allowed, shows up as a row error rather than as a difference you can see. Download the
+      template again before building the next file.
+    </div>
+    <div class="meta">
+      template <code>{{ batch.template_fingerprint[:12] or 'not stated' }}</code> ·
+      validated against <code>{{ batch.fingerprint[:12] }}</code>
+    </div>
+  </div>
+{% endif %}
+
+{# Totals in the result-meta shape: the count on the left, the sums beside it.
+   The sums are over the VALID rows only, and the sentence under them names what
+   was left out — a number an operator is about to approve has to say what it
+   excludes. #}
+<p class="row result-meta">
+  <span class="count">{{ totals.rows }} row{{ '' if totals.rows == 1 else 's' }} · {{ totals.valid }} valid · {{ totals.invalid }} invalid</span>
+  {% for asset, amount in totals.by_currency.items() %}
+    <span class="breakdown num">{{ amount }} {{ asset }} across the valid rows</span>
+  {% else %}
+    <span class="breakdown">no valid rows, so there is no total</span>
+  {% endfor %}
+  <span class="spacer"></span>
+  {# The one export link outside `m.result_meta`, and gated on the same
+     permission it is: a download is not a page (PERMISSIONS.md). #}
+  {% if request.state.actor is defined and request.state.actor
+        and 'export.csv' in request.state.actor.permissions %}
+    <a href="{{ results_csv }}">Export results CSV</a>
+  {% endif %}
+  <a href="{{ request.url.path }}">Refresh</a>
+</p>
+{% if totals.invalid %}
+  <p class="muted">
+    {{ totals.invalid }} row{{ '' if totals.invalid == 1 else 's' }} excluded by validation — not
+    included in these totals, and nothing about {{ 'it' if totals.invalid == 1 else 'them' }} would
+    be dispatched.
+  </p>
+{% endif %}
+
+{# Everything that changes while a batch dispatches lives inside this one
+   fragment, and the polling attributes live ON it — so the swap that arrives
+   after the last row also carries the decision to stop asking (`polling` is
+   false once the batch is no longer partially dispatched). The house
+   auto-refresh pattern: `operations/detail.html`, `applications/_status.html`. #}
+<div id="batch-progress"
+     {% if polling %}hx-get="{{ request.url.path }}" hx-trigger="every 3s"
+     hx-select="#batch-progress" hx-target="#batch-progress" hx-swap="outerHTML"{% endif %}>
+
+{% if batch.status in ('partially_dispatched', 'dispatched') %}
+  {# The split, stated honestly: what was sent, what Conduit refused, what is
+     still being confirmed, what this console declined to send. `ok` on the
+     batch is about the batch's own job — settlement is each row's transaction.
+
+     "Still to go" is the count of payments this batch STILL OWES — the rows a
+     dispatch would actually put on the wire, which is `sending.valid`: the
+     confirm screen's own derivation off `SENDABLE_ROW_STATES`, and the same
+     number the dispatch card below prints, because two elements of one page
+     disagreeing about what is unpaid is the defect this replaced. It is the one
+     figure here that is not an outcome bucket, so the `not sent` rows are
+     counted in it a second time, deliberately: this console declined to send
+     them, nothing reached Conduit, and dispatching again sends exactly those.
+     Counting `pending` here read "0 still to go" over a batch that owed every
+     row of itself, because an aborted run leaves refusals, not pendings. #}
+  <p class="row result-meta">
+    <span class="count">
+      {{ tally.sent }} sent · {{ tally.rejected }} refused by Conduit ·
+      {{ tally.unconfirmed }} awaiting confirmation · {{ tally.refused }} not sent ·
+      {{ tally.sending }} in flight · {{ sending.valid }} still to go
+    </span>
+  </p>
+  {% if batch.status == 'partially_dispatched' %}
+    <p class="muted">
+      Dispatching. Rows are sent one at a time and this list refreshes itself; leaving the page
+      does not stop it, and coming back to dispatch again cannot send a row twice.
+    </p>
+  {% endif %}
+{% endif %}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Row</th><th>Purpose</th><th>Destination</th><th>Amount</th><th>Result</th></tr>
+  {% for row in rows %}
+    <tr {{ 'class="exception"'|safe if row.errors }}>
+      <td class="num">{{ row.row_number }}</td>
+      {# The row's own purpose, because it is what decided which requirements
+         judged it, which gate it went through and whether the shared documents
+         rode with it. Label to read, raw key beside it — the column takes the
+         raw key. #}
+      <td>{{ enum_label(row.purpose) or '—' }}<div class="muted"><code class="raw">{{ row.purpose }}</code></div></td>
+      <td>
+        {% if row.contact_label %}
+          {{ row.contact_label }}
+          <div class="muted"><code>{{ row.contact_id }}</code></div>
+        {% elif row.unreadable %}
+          <span class="muted" title="This row's stored destination could not be decrypted">unreadable</span>
+        {% elif row.purged %}
+          {# The third state. A blank name over blank coordinates reads as "this
+             row had no destination", which for a finished batch is exactly
+             backwards: it had one, it was paid, and the retention job emptied
+             it. Same idiom as a deleted contact's "coordinates purged". #}
+          <span class="muted">destination purged after retention</span>
+        {% else %}
+          {{ row.recipient.legalName or '—' }}
+        {% endif %}
+        {# Last four only, from the same policy every other surface uses
+           (`counterparties.identify`; DESIGN.md's last-4 row). A batch report is
+           the easiest place in this console to read a hundred account numbers
+           off one screen, which is exactly why it does not print one. #}
+        {% if not row.unreadable and not row.purged %}<div class="muted num">{{ coords(row.recipient) }}</div>{% endif %}
+      </td>
+      <td class="num">{{ row.amount or '—' }}{% if row.amount %} {{ batch.asset }}{% endif %}</td>
+      <td>
+        {% for error in row.errors %}
+          {# The sentence is the form engine's own — the same one the single
+             payout form prints under the same field. Only the column name in
+             front of it is this page's, because a table row has no labels above
+             its cells. #}
+          <div class="err">{% if error.label %}{{ error.label }}: {% endif %}{{ error.detail }}</div>
+        {% else %}
+          {% if row.state == 'pending' %}
+            <span class="muted">Valid — not sent</span>
+          {% else %}
+            {{ m.statuspill('payout_batch_rows', row.state) }}
+            {% if row.transaction_id %}
+              <div><a href="/transactions/{{ row.transaction_id }}"><code>{{ row.transaction_id }}</code></a></div>
+            {% endif %}
+            {% if row.state == 'rejected' %}
+              {# The refusal in this console's words (`batches.rows_of` hands the
+                 translated view, not the stored vendor body — A3 gate, M1), and
+                 this console's ruling underneath it: a refused row keeps its
+                 operation and is final in this batch. The resolution rides with
+                 the title because for a code with no sentence of its own it is
+                 the only thing an operator can act on. #}
+              <div class="err">{{ (row.problem or {}).get('title') or 'Refused' }}{% if (row.problem or {}).get('resolution') %} — {{ row.problem.resolution }}{% endif %}</div>
+              <div class="muted">{{ rejected_is_final }}</div>
+            {% elif row.state == 'unconfirmed' %}
+              <div class="muted">
+                Conduit did not give a definitive answer. The reconciler owns this from here —
+                it looks the payout up by this operation's reference and resolves it
+                (OPERATIONS_SPEC §3); nothing needs re-sending, and re-dispatching this batch
+                will not touch this row.
+              </div>
+            {% elif row.state == 'refused' %}
+              <div class="err">{{ row.dispatch_error }}</div>
+            {% endif %}
+            {% if row.operation_id %}
+              <div class="muted"><a href="/operations/{{ row.operation_id }}">Submission record</a></div>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+</div>
+
+{# The dispatch card is FIRST, and asks for either permission, because preparing
+   a batch and sending it are separate: PERMISSIONS.md's own example role is
+   `["console.view", "batch.dispatch"]`, and gating this whole block on
+   `batch.upload` left that role reading "ready to dispatch" with no way to do
+   it. Everything below the card is preparation and stays on `can_act`. #}
+{% if batch.status in ('ready', 'partially_dispatched') and (can_act or can_dispatch) %}
+  {% include "batches/_dispatch.html" %}
+{% elif not can_act %}
+  <p class="muted">
+    Read-only: attaching documents, marking a batch ready and abandoning it need the
+    <code>batch.upload</code> permission; dispatching one needs <code>batch.dispatch</code>.
+    Everything above — the rows and their results — is readable here. (The results export is its
+    own permission, <code>export.csv</code>: a download is not a page.)
+  </p>
+{% elif batch.status == 'validating' %}
+  <form hx-post="/customers/{{ customer_id }}/batches/{{ batch.id }}/ready"
+        hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+    {# The batch's shared documents: attached once, and they ride with every row
+       when it is dispatched. `attachable()` resolves every id against this
+       console's own upload ledger before anything is stored (OPERATIONS_SPEC §3).
+       `documentation.required` is the answer discovery gave when the file was
+       uploaded; the accepted types are listed in the template's own header
+       block, which is where the operator meets them. #}
+    {{ m.attach_documents(
+         {'required': batch.documents_required,
+          'acceptedDocumentTypes': batch.accepted_document_types or []},
+         rm, document_purpose, request) }}
+    <p class="row">
+      <button type="submit" name="save" value="1">Save attachments</button>
+      <button type="submit" class="primary" {{ 'disabled' if totals.invalid }}>Mark ready</button>
+      {{ m.working('Saving…') }}
+    </p>
+    {% if totals.invalid %}
+      <p class="muted">
+        A batch with an invalid row cannot be marked ready. Correct the file and upload it again —
+        that is a <strong>new</strong> batch with its own id, and this one can be abandoned below.
+        Rows are never edited here: what was uploaded stays the record of what was uploaded.
+      </p>
+    {% else %}
+      <p class="muted">
+        Marking ready sends nothing. It records that {{ totals.valid }} validated
+        row{{ '' if totals.valid == 1 else 's' }} are what you intend to dispatch; dispatch is a
+        separate, explicit step.
+      </p>
+    {% endif %}
+  </form>
+{% else %}
+  <p class="muted">
+    This batch is {{ batch.status.replace('_', ' ') }}. Nothing further can be done with it here.
+  </p>
+{% endif %}
+</div>{# /batch-progress — the dispatch card is INSIDE it on purpose: dispatch
+        runs as a background task, so the card is rendered while the run is
+        still going and the poll is the only thing that ever corrects it. Left
+        outside, a finished batch kept showing "Partly dispatched — 1 row still
+        has no payout" and a live dispatch button above a line reading "0 still
+        to go". The swap that stops the polling now also removes the card and
+        swaps in the sentence for a batch there is nothing left to do with. #}
+
+{% if can_act and batch.status in ('validating', 'ready') %}
+  <form hx-post="/customers/{{ customer_id }}/batches/{{ batch.id }}/abandon"
+        hx-sync="this:drop" hx-disabled-elt="find button">
+    <p class="row">
+      <button type="submit" class="danger">Abandon this batch</button>{{ m.working() }}
+    </p>
+    <p class="muted">
+      Closes this batch out in this console. No payout was created from it, so there is nothing at
+      Conduit to undo — the rows and their results stay on file, and the batch stops offering to be
+      dispatched. There is no way back: upload the file again to get a live batch.
+    </p>
+  </form>
+{% endif %}
+{% endblock %}

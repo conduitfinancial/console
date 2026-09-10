@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{#
+  htmx 2 swaps 2xx only: every other response is dropped on the floor, error
+  flag set, nothing rendered. This console deliberately answers some POSTs with
+  a re-rendered page and a non-2xx status — a 422 with the operator's own values
+  and the server's field errors on them, a 400 for a missing country, a 502 when
+  discovery is unreachable — and without this config the operator would click
+  submit and watch nothing happen. The list below is the app's *intentional*
+  render statuses and nothing else: 401/403/404/409/429 and the remaining 5xx
+  keep htmx's default no-swap, because those bodies are the middleware's or
+  FastAPI's, not a page this app meant to show inside itself.
+
+  The forms that can receive one target `body` (see `app/web/__init__.py`).
+#}
+<meta name="htmx-config" content='{"responseHandling":[
+  {"code":"204","swap":false},
+  {"code":"[23].."   ,"swap":true},
+  {"code":"400","swap":true},
+  {"code":"422","swap":true},
+  {"code":"502","swap":true},
+  {"code":"[45].."   ,"swap":false,"error":true}
+]}'>
+<title>{% block title %}Conduit Console{% endblock %}</title>
+{# `theme.js` is loaded HERE, blocking, ahead of the stylesheet — and it is the
+   ONLY script in the head. It stamps `data-theme` on `<html>` from the
+   operator's `localStorage` choice, and an attribute that decides which of two
+   palettes the page is painted in has to be there before the first box is
+   drawn, or a dark-mode operator opens every page on a white flash.
+
+   CSP is `script-src 'self'` with no `unsafe-inline` (app/main.py), so the
+   usual one-line inline bootstrap is not available and never will be: the
+   choice is a file, and a file in `<head>` is the only place that runs before
+   paint. `defer`/`type=module` were both rejected — they run after parsing,
+   which the browser is free to paint before.
+
+   It is its OWN file rather than the head of `app.js`: a
+   blocking script in `<head>` is paid for on every first paint, and ~1 KB is a
+   fair price for a theme where ~40 KB of wizard glue is not. app.js keeps the
+   position it has always had, at the foot of the body, and does not mention the
+   theme. #}
+<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="/static/styles.css">
+{# Inline, so there is no file to serve and no 404 in the log. An ink square
+   with a paper bar through it — the chrome's own two colours, nothing to
+   design. #}
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23103020'/><rect x='3.5' y='7' width='9' height='2' rx='1' fill='%23ffffff'/></svg>">
+</head>
+<body hx-headers='{{ csrf_hx_headers(request) }}'>
+{# First focusable thing on the page, invisible until it has focus. The ribbon
+   is ~15 links before the content on every page, so a keyboard operator paid
+   for them once per navigation; the QA pass found no skip link at all. Plain
+   anchor, no JS: `#content` is the `<main>`, and `tabindex="-1"` is what makes
+   the jump move focus as well as the viewport.
+
+   Restored 2026-09-03 (spec §4.4), reversing the 2026-09-02
+   removal. That removal's premise was "mouse-first payment operators" — a
+   handful of ours; the audience is now another organization's treasury staff,
+   and B2B financial software answers accessibility questionnaires. The link is
+   OUTSIDE the shell on purpose: it is fixed to the viewport, not to the card.
+   #}
+<a class="skip" href="#content">Skip to content</a>
+{% set badge = env_badge() %}
+{# The ribbon's active state, and the one place `section` is not enough.
+   Every money-movement route passes `section="orders"` because all three
+   *start* on the launcher — but under this IA the orders LIST is a browse
+   surface (Transactions › Orders) and a payout form is an action (Transact ›
+   Send a payout), so the two halves of that one key have to be told apart.
+   The path is what tells them apart, read here and nowhere else: no route
+   signature changes, and `section` keeps meaning exactly what it meant. #}
+{% set path = request.url.path %}
+{# `/payouts` without the trailing slash is the Transact fork, and `/batches` is
+   the fork's other arm — both are actions, so both light "Send a payout" rather
+   than the Orders list. The batch pages were landing on the browse half before
+   the fork existed, which was wrong for the same reason. #}
+{% set act = 'payout' if '/payouts' in path or '/batches' in path
+        else ('transfer' if '/transfers/' in path
+        else ('convert' if '/convert' in path else '')) %}
+{# `count` is the one ribbon entry that carries a number (RFIs). Falsy is the
+   whole rule: a zero renders nothing because an empty inbox needs no badge, and
+   a failed read is `None` and renders nothing either. Both are silent and both
+   are honest — what is never rendered is a confident "0" the console did not
+   actually count. #}
+{# `id` is optional and emitted FIRST, before `class`: the product tour anchors
+   its steps to stable ids (never to copy text), and one ribbon entry — RFIs —
+   is one of its six targets. Every other entry renders byte-identically to
+   before. #}
+{% macro item(href, label, active, count=none, id=none, count_title='') %}<a{{ (' id="' ~ id ~ '"')|safe if id }} class="item{{ ' on' if active }}" href="{{ href }}"{{ ' aria-current="page"'|safe if active }}>{{ label }}{% if count %}<span class="count" title="{{ count_title }}">{{ count }}</span>{% endif %}</a>{% endmacro %}
+{# The shell (Arca §2.1): the window is grey, the app is a card floating on it.
+   One wrapper element, holding the ribbon | content | footer grid that used to
+   sit on `<body>` itself — `body` cannot be both the window ground and the card
+   at once, and the grid has to move to whichever of the two is the card.
+
+   It wraps the footer as well as the page: the footer is the console's own
+   bottom edge and belongs inside the thing it is the edge of. #}
+<div class="shell">
+<nav class="ribbon" id="ribbon" aria-label="Sections">
+  <div class="ribbon-top">
+    <a class="brand" href="/">Conduit Console</a>
+    {# The environment and the ceiling are the money facts; the hostname is not
+       (Arca §4.1). `api.sandbox.conduit.financial` is this installation's
+       infrastructure, not the operator's information, and printing a vendor
+       hostname on every page is one of the things that made this read as
+       internal tooling. So the badge says `Sandbox · ceiling 5000`, `Staging`,
+       `Production` — and the host, with `AUTH_MODE` beside it, moves into the
+       `title` where whoever operates the install can still find it and a
+       treasury user never has to read it (there is
+       no settings page and YAGNI says there should not be one for two facts).
+
+       The ceiling renders **whenever `MONEY_CEILING` is set, in every
+       environment including production**. §4.1 writes production's badge as
+       `Production`, with no ceiling — which is true of the default, because the
+       ceiling is normally unset there, and would be a lie about the console
+       whenever it is not: a refusal the operator did not know was coming reads
+       as a broken console, and that is no less true in
+       production. The env decides the word; the setting decides the ceiling. #}
+    {# The `title` is two SENTENCES, not the two values with a dash in front of
+       them. A tooltip is read aloud by a screen reader and hovered by someone
+       who could not work the fact out from the badge — both want prose. #}
+    <span id="env-badge" class="badge {{ badge.tone }}"
+          title="This console is wired to {{ badge.host }}. It decides who you are with AUTH_MODE={{ badge.auth }}.">{{ badge.env|capitalize }}{% if badge.ceiling %} · ceiling {{ badge.ceiling }}{% endif %}</span>
+  </div>
+
+  {# A red count here is the sharpest claim the chrome makes: money in a state
+     only a human can settle (`stalled` exactly — the machine has stopped
+     asking). It links where that work lives, the needs-attention table. #}
+  {{ item('/', 'Overview', section == 'overview',
+          request.state.ops_stalled if request.state.ops_stalled is defined else none,
+          count_title='Stalled operations — the console has stopped asking and settling them is yours') }}
+
+  {# The noun half. A customer is the thing all four of these hang off: an
+     application onboards one, an RFI asks one for something, an account
+     belongs to one. The group head is a label rather than a link — its
+     Directory sub is the /customers page, and a head that navigates as well
+     as names would give the same URL two entries. #}
+  <div class="group{{ ' on' if section in ('customers', 'applications', 'accounts', 'contacts') }}"
+       role="group" aria-labelledby="grp-customers">
+    <p class="group-head" id="grp-customers">Customers</p>
+    {{ item('/customers', 'Directory', section == 'customers') }}
+    {# Rejected AND resubmittable: parked work with a next step. A final
+       rejection is not an action and earns no badge. #}
+    {{ item('/applications', 'Applications', section == 'applications',
+            request.state.apps_resubmittable if request.state.apps_resubmittable is defined else none,
+            count_title='Rejected applications that can be corrected and resubmitted') }}
+    {{ item('/accounts', 'Accounts', section == 'accounts') }}
+    {# Contacts is a browse noun, not an operator verb: it answers "where can
+       this customer's money go", and every row is a fact about a customer. The
+       placement is provisional pending the sub-grouping window. #}
+    {{ item('/contacts', 'Contacts', section == 'contacts') }}
+  </div>
+
+  {# The two ledgers. `/orders` keeps its page, its route and its `orders`
+     section key; only the label it wears in the ribbon is new — under
+     Transactions it is the list of conversion orders, which is what the page
+     below the launcher has always been. #}
+  <div class="group{{ ' on' if section in ('transactions', 'orders') and not act }}"
+       role="group" aria-labelledby="grp-transactions">
+    <p class="group-head" id="grp-transactions">Transactions</p>
+    {{ item('/transactions', 'Ledger', section == 'transactions') }}
+    {{ item('/orders', 'Orders', section == 'orders' and not act) }}
+  </div>
+
+  {# RFIs stand on their own, between the browse groups and the seam. An RFI is a demand
+     Conduit raises, about a customer OR about a transaction — it belongs to neither
+     noun's group, and filing it under one of them hides half of what the page lists. It
+     is not an operator verb either, so it does not go below the rule: nothing here
+     starts an RFI, this console only answers them. What it actually is is an inbox, and
+     an inbox sits by itself with a count on it. The count is `request.state.rfi_open`
+     (`web.rfi_badge`): open + responded `rfis` projections, this installation's own
+     records, no Conduit call. It is absent at zero and absent when the read failed —
+     see the `item` macro. #}
+  {{ item('/rfis', 'RFIs', section == 'rfis',
+          request.state.rfi_open if request.state.rfi_open is defined else none,
+          id='ribbon-rfis', count_title='Open requests this console has observed') }}
+
+  {# The 2px rule is the browse/act seam: everything above reads the state of
+     money, everything below changes it. #}
+  <p class="divider">Actions</p>
+
+  {{ item('/drafts', 'Onboard', section == 'drafts') }}
+
+  {# The three verbs land on the three FORMS. They
+     used to point at `/orders`' launcher, because the flows were per-customer
+     routes and the ribbon has no customer in context — which made "send a
+     payout" a two-page errand that asked *who* before it asked *what*. The
+     customer is a control inside each form now, so the ribbon can link straight
+     at the action; the launcher still stands for anyone who starts from a
+     customer instead. They are still three entries rather than one, because
+     each one lights when its flow is on screen: the ribbon says which of the
+     three you are in the middle of, which is the half a single "Transact" link
+     could not say. The head is a label for the same reason as Customers'. #}
+  <div class="group{{ ' on' if act }}" role="group" aria-labelledby="grp-transact">
+    <p class="group-head" id="grp-transact">Transact</p>
+    {{ item('/payouts', 'Send a payout', act == 'payout') }}
+    {{ item('/transfers/new', 'Transfer', act == 'transfer') }}
+    {{ item('/convert', 'Convert', act == 'convert') }}
+  </div>
+
+  {# The env strip (DESIGN_DIRECTION "Header"): who you are and what that lets
+     you do. Re-homed to the foot of the ribbon with the rest of the chrome.
+
+     The `auth {{ badge.auth }}` line is GONE (Arca §4.2): `AUTH_MODE=disabled`
+     is deployment debug output, and it is on a treasury client's screen on
+     every page. It is not deleted, it is re-homed — into the env badge's
+     `title`, above, where the person who deployed this console can hover for it.
+     The display name and roles stay: the rule is that a forbidden
+     affordance is not drawn, and that only works if you can see what you hold.
+
+     The strip renders even with no actor, because the theme control is a
+     browser fact rather than an operator fact and must not disappear with the
+     identity. #}
+  <div class="env-strip">
+    {% if request.state.actor is defined and request.state.actor %}
+      <span>{{ request.state.actor.display_name }}</span>
+      {% if request.state.actor.roles %}
+        <span>{{ request.state.actor.roles|sort|join(' · ') }}</span>
+      {% endif %}
+    {% endif %}
+    {# Three-way, not a two-state switch: "follow the machine" is a real answer
+       and the one most operators want, and a binary toggle cannot express it —
+       it can only guess an initial position from `prefers-color-scheme` and
+       then silently stop tracking it. Real radios in the existing `.segmented`
+       shape, so the keyboard behaviour, the focus ring and the selection
+       grammar are the console's own and no new mechanism is invented.
+
+       Server-rendered with System checked; app.js corrects the checked one from
+       `localStorage` on load, which is also where the choice is kept. Nothing
+       server-side knows or stores the theme — it is this browser's preference,
+       not this actor's, and a console signed into from two machines should
+       follow each of them. #}
+    <div class="segmented" id="theme-choice" role="group" aria-label="Theme">
+      <label><input type="radio" name="theme" value="system" checked>System</label>
+      <label><input type="radio" name="theme" value="light">Light</label>
+      <label><input type="radio" name="theme" value="dark">Dark</label>
+    </div>
+  </div>
+  {# The tour's permanent way in, so skipping it is never final. A
+     real link, not a button: the tour only runs on the Overview, where its
+     targets are, so from anywhere else this has to navigate anyway — and a
+     plain anchor is the affordance whether or not app.js ran. `?tour=1` is
+     read by app.js on load; nothing server-side looks at it. #}
+  <a class="item tour" id="tour-link" href="/?tour=1">Take the tour</a>
+</nav>
+<main id="content" tabindex="-1">
+  {# Quick actions: the three verbs an operator starts a day with,
+     top-right of the content column, on every page.
+
+     **Its own row, above `.page-head`, not inside it.** Fourteen templates pass
+     a body to `page_head`'s `.action` slot, which is `margin-left: auto` — so
+     folding these in would put two right-aligned clusters on one baseline and
+     make the page's own forward action compete with chrome that is identical
+     everywhere. A separate row keeps `.page-head` byte-identical on all
+     fourteen. Not `.ribbon-top` either: that line is the brand and the
+     environment pill, and it is the chrome's one identity line.
+
+     **Secondary, never `.primary`.** DESIGN.md's rule is that the darkest thing
+     on the page is the ONE thing you press; a primary pill here would outrank
+     every page's real action on every page at once.
+
+     **Gated, unlike the ribbon's Actions entries, and that asymmetry is
+     deliberate.** A section list says where things live; this says "do it now",
+     and the rule is that a forbidden affordance is not drawn. Note what
+     the gate is and is not: all three targets are `console.view` GETs, so this
+     withholds nothing a viewer could not reach by typing the URL — what it
+     prevents is sending someone to a form whose submit they do not hold. The
+     honesty is the point, not the access control (which lives on the POST).
+
+     Convert is deliberately absent: Convert keeps its ribbon entry. No active
+     state — the ribbon already says where you are, and an operator mid-payout
+     may well want a second one, so the pill for the page you are on still
+     renders.
+
+     **Pay a contact** is the fourth, asked for by name
+     after the three shipped: "quick actions such as pay a contact … pick a
+     contact and just resend the funds". It shares `payout.create` with Send a
+     payout because it is the same verb entered from the other end — the
+     destination rather than the route — and it lands on a picker, never on a
+     mutation.
+
+     **A labelled `<nav>`, not a bare div** (2026-09-02). It is a
+     list of links to elsewhere, drawn identically on every page — the same
+     thing `nav.ribbon` is, so it takes the same element and, because a second
+     unlabelled navigation landmark is worse than none, its own accessible name.
+     First in `<main>` is also correct for focus order: chrome comes before the
+     page, exactly as the ribbon does. #}
+  {%- set quick = request.state.actor.permissions
+                  if request.state.actor is defined and request.state.actor else [] -%}
+  {%- set actions = [
+        ('onboarding.edit', '/onboarding', 'Onboard'),
+        ('payout.create', '/payouts/contact', 'Pay a contact'),
+        ('payout.create', '/payouts', 'Send a payout'),
+        ('transfer.create', '/transfers/new', 'Transfer'),
+      ]|selectattr('0', 'in', quick)|list -%}
+  {%- if actions %}<nav id="quick-actions" class="quick-actions" aria-label="Quick actions">
+    {%- for _perm, href, label in actions %}<a class="btn" href="{{ href }}">{{ label }}</a>{% endfor %}
+  </nav>{% endif %}
+  {#- `msg`/`err` stay plaintext (the address bar's own honesty —
+     `redirect()`'s docstring), but each carries a `msgsig`/`errsig` companion
+     that `redirect()` (`app/web/__init__.py`) signs and that must both unseal
+     AND match this exact text AND this exact page before a banner renders —
+     the page check is what stops a genuine flash, copy-pasted from one page's
+     address bar, from replaying as an unearned banner on another page for the
+     rest of its `FLASH_TTL`. `flash()` turns a bare, forged, mismatched,
+     wrong-page or expired pair into "" — never a raised exception, and never
+     an empty banner div. What renders is the signed copy `flash()` hands
+     back, not the query param. #}
+  {%- set flash_msg = flash(request.query_params.get('msg'), request.query_params.get('msgsig'), request.url.path) %}
+  {%- set flash_err = flash(request.query_params.get('err'), request.query_params.get('errsig'), request.url.path) %}
+  {% if flash_msg %}<div class="flash msg">{{ flash_msg }}</div>{% endif %}
+  {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+{# The canvas footer carries Conduit Financial's own marketing tagline
+   ("Anydollar. Anytime. Anywhere.") and Conduit's own regulatory disclaimer
+   ("Conduit is a financial technology company, not a bank…"). Neither is this
+   console's to say: it is a self-hosted operator console for one organization's
+   key, not Conduit's product, and it cannot make a statement on Conduit's
+   behalf about who provides the banking. The honest line is the README's own,
+   about this console — which is also the more useful one to have under every
+   page: what an operator is looking at is not the record of the money. #}
+<footer class="site">
+  <span class="mark">Conduit Console</span>
+</footer>
+</div>
+<script src="/static/htmx.min.js"></script>
+<script src="/static/conditions.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

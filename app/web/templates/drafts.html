@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Onboard · Conduit Console{% endblock %}
+{% block body %}
+{# The one page that keeps a page-head primary to `/onboarding`: this page IS
+   the verb (the ribbon's Onboard entry lands here), so the darkest thing on it
+   is the thing you press. Labelled "Onboard", matching the chrome pill
+   word for word — one name for one destination (2026-09-02). #}
+{% call m.page_head('onboarding', 'Onboard') %}
+  {% if can_edit %}<a class="btn primary" href="/onboarding">Onboard</a>{% endif %}
+{% endcall %}
+<p class="muted lede">
+  Every onboarding you have started here. Answers autosave and are encrypted at rest; a
+  submitted one becomes an <a href="/applications">application</a>.
+</p>
+
+{# Not "In progress": this table lists submitted and purged drafts too — the
+   state column is what tells them apart, and the filter is what narrows to one
+   of them. Connected segments, because this is one choice with one answer
+   (DESIGN.md's control grammar); the Overview's Open drafts tile links straight
+   at `?state=open`. #}
+<h2>Onboardings you started</h2>
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/drafts" class="bar row"
+      hx-get="/drafts" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <label id="draft-state">Show</label>
+  <div class="segmented" role="group" aria-labelledby="draft-state">
+    <label><input type="radio" name="state" value="" {{ 'checked' if not state }}> All</label>
+    <label><input type="radio" name="state" value="open" {{ 'checked' if state == 'open' }}> In progress</label>
+    <label><input type="radio" name="state" value="submitted" {{ 'checked' if state == 'submitted' }}> Submitted</label>
+  </div>
+  {# The page size has to survive a filter submit as well as a page turn,
+     or filtering silently reverts to 25 (the ledger's rule). #}
+  <input type="hidden" name="limit" value="{{ pager.size }}">
+  <button type="submit">Filter</button>
+</form>
+<div class="table-scroll">
+<table>
+  <tr><th>Applicant</th><th>Country</th><th>Reference</th><th>Updated</th><th>State</th><th></th></tr>
+  {% for draft in drafts %}
+    <tr>
+      {# The applicant's own legal name, read out of the encrypted answers at
+         render time (`drafts.name_of`) — no plaintext column, nothing stored.
+         A purged, unreadable or not-yet-answered draft has no name and says
+         so: the reference below is still what identifies the row. #}
+      <td>{% if draft.name %}<a href="/onboarding/{{ draft.id }}">{{ draft.name }}</a>
+          {% else %}<span class="muted">unnamed so far</span>{% endif %}</td>
+      <td>{{ draft.country or '—' }}</td>
+      <td><code>{{ draft.reference or draft.id }}</code></td>
+      <td>{{ draft.updated_at|ts }}</td>
+      <td>
+        {% if draft.purged_at %}<span class="pill muted">Submitted · answers purged</span>
+        {% elif draft.submitted_at %}<span class="pill wait">Submitted</span>
+        {% else %}<span class="pill">In progress</span>{% endif %}
+      </td>
+      <td><a href="/onboarding/{{ draft.id }}">Open</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">
+      {% if state == 'submitted' %}
+        No onboarding of yours has been submitted yet — a submitted one becomes an
+        <a href="/applications">application</a>.
+      {% else %}
+        Nothing half-finished — every onboarding this console started has been submitted or discarded.
+        {% if can_edit %}<a href="/onboarding">Start an onboarding</a>.{% endif %}
+      {% endif %}
+      {% if state %}<a href="/drafts">Show all</a>.{% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# This list had no bottom at all before the paging sweep — every draft this
+   actor ever started, one decrypt each. The state filter rides the page turn. #}
+{{ m.table_foot(pager) }}
+{% endblock %}

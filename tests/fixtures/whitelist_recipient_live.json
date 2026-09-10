@@ -1,0 +1,19 @@
+{
+  "accountNumber": "000123456789",
+  "bic": null,
+  "createdAt": "2026-08-28T20:19:17.951Z",
+  "customerId": "cus_033TR1SzDUnhK19QUbwArc",
+  "evidenceDocumentIds": [
+    "doc_034FAYL9nqXUBNkyY7WJd1"
+  ],
+  "iban": null,
+  "id": "wlr_034FAYLJA1nB0QtZYC4EJC",
+  "label": "zzztest-5043599a140d",
+  "legalName": "ZZZTEST Own Account 5043599a140d",
+  "rail": "us",
+  "rejectionReason": null,
+  "relationship": "self",
+  "routingNumber": "021000021",
+  "status": "pending_review",
+  "updatedAt": "2026-08-28T20:19:17.951Z"
+}

@@ -1,0 +1,39 @@
+[project]
+name = "conduit-console"
+version = "0.1.0"
+description = "Conduit Console — self-hosted operator console for Conduit Financial v2"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "httpx",
+    "sqlalchemy[asyncio]>=2",  # [asyncio] = greenlet, required by the async engine
+    "alembic",
+    "psycopg[binary]",
+    "pydantic-settings",
+    "cryptography",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    # Browser e2e only (tests/browser). Dev group, so `uv sync --no-dev` keeps
+    # it — and the ~400 MB of chromium it drives — out of the runtime image.
+    "pytest-playwright",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# One event loop for the whole run: the async engine's pool outlives a test.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

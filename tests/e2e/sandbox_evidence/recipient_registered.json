@@ -1,0 +1,19 @@
+{
+  "accountNumber": "000123456789",
+  "bic": null,
+  "createdAt": "2026-08-31T03:26:39.850Z",
+  "customerId": "cus_034GTiOfAFAhfDVahyir2N",
+  "evidenceDocumentIds": [
+    "doc_034GTiJvS8PuxbKGwmSBHq"
+  ],
+  "iban": null,
+  "id": "wlr_034GTidWXmp0H3GCoVjkwv",
+  "label": "ZZZTEST sweep recipient",
+  "legalName": "ZZZTEST Sweep 1c66c5ce43 EOOD",
+  "rail": "us",
+  "rejectionReason": null,
+  "relationship": "self",
+  "routingNumber": "021000021",
+  "status": "registered",
+  "updatedAt": "2026-08-31T03:26:39.966Z"
+}

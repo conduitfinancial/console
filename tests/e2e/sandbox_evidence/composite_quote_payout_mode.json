@@ -1,0 +1,66 @@
+{
+  "_host": "https://api.sandbox.conduit.financial",
+  "_observed_at": "2026-09-01T22:29:11Z",
+  "_probe": "Live sandbox probe: can a fiat\u2192fiat conversion still not carry a payout?",
+  "amount": {
+    "amount": "10.00",
+    "code": "USD"
+  },
+  "createdAt": "2026-09-01T22:29:10.831Z",
+  "destinationAssetRef": {
+    "code": "EUR"
+  },
+  "expiresAt": "2026-09-01T22:34:10.831Z",
+  "id": "qte_034HV62iMjgGdslAomAduH",
+  "lockSide": "source",
+  "options": [
+    {
+      "destinationAmount": {
+        "amount": "7.75",
+        "code": "EUR"
+      },
+      "fees": [
+        {
+          "assetAmount": {
+            "amount": "1.00",
+            "code": "USD"
+          },
+          "charge": "conversion",
+          "owner": "conduit",
+          "type": "fixed"
+        },
+        {
+          "assetAmount": {
+            "amount": "0.00",
+            "code": "EUR"
+          },
+          "charge": "payout",
+          "owner": "conduit",
+          "type": "fixed"
+        }
+      ],
+      "id": "qop_034HV634ad6dU6zOq80etF",
+      "rail": "sepa",
+      "rate": {
+        "endUserRate": "0.8605592125127025",
+        "referenceRate": "0.862716002519",
+        "totalSpreadBps": "25"
+      },
+      "recipientAmount": {
+        "amount": "7.75",
+        "code": "EUR"
+      },
+      "sourceAmount": {
+        "amount": "9.00",
+        "code": "USD"
+      },
+      "totalDebit": {
+        "amount": "10.00",
+        "code": "USD"
+      }
+    }
+  ],
+  "sourceAssetRef": {
+    "code": "USD"
+  }
+}

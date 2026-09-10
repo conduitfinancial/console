@@ -1,0 +1,355 @@
+{
+  "blockedJurisdictions": [
+    "AFG",
+    "BDI",
+    "CUB",
+    "ERI",
+    "HTI",
+    "IRN",
+    "LBY",
+    "MLI",
+    "MMR",
+    "PRK",
+    "RUS",
+    "SDN",
+    "SOM",
+    "SSD",
+    "SXM",
+    "SYR",
+    "UKR",
+    "VEN",
+    "YEM"
+  ],
+  "documentation": {
+    "acceptedDocumentTypes": [
+      "bank_verification_letter",
+      "invoice",
+      "contract",
+      "payroll_register",
+      "investment_agreement",
+      "other"
+    ],
+    "reason": "A supporting document is required unless the payout purpose is intercompany.",
+    "required": true
+  },
+  "fields": [
+    {
+      "name": "virtualAccountId",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "enum": [
+        "fiat"
+      ],
+      "name": "destination.type",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "enum": [
+        "fedwire"
+      ],
+      "name": "destination.rail",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 64,
+      "minLength": 4,
+      "name": "destination.recipient.accountNumber",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 9,
+      "minLength": 9,
+      "name": "destination.recipient.routingNumber",
+      "pattern": "^[0-9]{9}$",
+      "required": true,
+      "type": "string",
+      "validator": "aba"
+    },
+    {
+      "enum": [
+        "CHECKING",
+        "SAVINGS"
+      ],
+      "name": "destination.recipient.accountType",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 140,
+      "name": "destination.recipient.bankName",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 120,
+      "name": "destination.recipient.bankAddress.addressLine1",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 120,
+      "name": "destination.recipient.bankAddress.addressLine2",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 80,
+      "name": "destination.recipient.bankAddress.city",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 80,
+      "name": "destination.recipient.bankAddress.state",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 32,
+      "name": "destination.recipient.bankAddress.postalCode",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "name": "destination.recipient.bankAddress.country",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 40,
+      "name": "destination.recipient.phone",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "enum": [
+        "BUSINESS"
+      ],
+      "name": "destination.recipient.type",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 140,
+      "name": "destination.recipient.legalName",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "name": "destination.recipient.countryOfRegistration",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 120,
+      "name": "destination.recipient.postalAddress.addressLine1",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 120,
+      "name": "destination.recipient.postalAddress.addressLine2",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 80,
+      "name": "destination.recipient.postalAddress.city",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 80,
+      "name": "destination.recipient.postalAddress.state",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 32,
+      "name": "destination.recipient.postalAddress.postalCode",
+      "required": false,
+      "requiredWhen": {
+        "field": "destination.recipient.postalAddress.country",
+        "notIn": [
+          "ABW",
+          "AGO",
+          "ARE",
+          "ATA",
+          "ATF",
+          "ATG",
+          "BDI",
+          "BEN",
+          "BES",
+          "BFA",
+          "BHS",
+          "BLZ",
+          "BOL",
+          "BVT",
+          "BWA",
+          "CAF",
+          "CIV",
+          "CMR",
+          "COD",
+          "COG",
+          "COK",
+          "COM",
+          "CUW",
+          "DJI",
+          "DMA",
+          "ERI",
+          "FJI",
+          "GAB",
+          "GHA",
+          "GMB",
+          "GNQ",
+          "GRD",
+          "GUY",
+          "HKG",
+          "JAM",
+          "KIR",
+          "KNA",
+          "LBY",
+          "LCA",
+          "MAC",
+          "MLI",
+          "MRT",
+          "MSR",
+          "MWI",
+          "NIU",
+          "NRU",
+          "PAN",
+          "PSE",
+          "QAT",
+          "RWA",
+          "SLB",
+          "SLE",
+          "SSD",
+          "STP",
+          "SUR",
+          "SXM",
+          "SYC",
+          "SYR",
+          "TCD",
+          "TGO",
+          "TKL",
+          "TLS",
+          "TON",
+          "TTO",
+          "TUV",
+          "UGA",
+          "VUT",
+          "WSM",
+          "YEM",
+          "ZWE",
+          "AW",
+          "AO",
+          "AE",
+          "AQ",
+          "TF",
+          "AG",
+          "BI",
+          "BJ",
+          "BQ",
+          "BF",
+          "BS",
+          "BZ",
+          "BO",
+          "BV",
+          "BW",
+          "CF",
+          "CI",
+          "CM",
+          "CD",
+          "CG",
+          "CK",
+          "KM",
+          "CW",
+          "DJ",
+          "DM",
+          "ER",
+          "FJ",
+          "GA",
+          "GH",
+          "GM",
+          "GQ",
+          "GD",
+          "GY",
+          "HK",
+          "JM",
+          "KI",
+          "KN",
+          "LY",
+          "LC",
+          "MO",
+          "ML",
+          "MR",
+          "MS",
+          "MW",
+          "NU",
+          "NR",
+          "PA",
+          "PS",
+          "QA",
+          "RW",
+          "SB",
+          "SL",
+          "SS",
+          "ST",
+          "SR",
+          "SX",
+          "SC",
+          "SY",
+          "TD",
+          "TG",
+          "TK",
+          "TL",
+          "TO",
+          "TT",
+          "TV",
+          "UG",
+          "VU",
+          "WS",
+          "YE",
+          "ZW"
+        ]
+      },
+      "type": "string"
+    },
+    {
+      "name": "destination.recipient.postalAddress.country",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "enum": [
+        "corporate_agreement",
+        "written",
+        "web"
+      ],
+      "name": "destination.ach.authorizationType",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "maxLength": 140,
+      "name": "destination.remittance.reference",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "maxLength": 280,
+      "name": "destination.remittance.description",
+      "required": false,
+      "type": "string"
+    }
+  ],
+  "rail": "fedwire",
+  "whitelist": {
+    "required": false
+  }
+}

@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ transaction_id }} · Conduit Console{% endblock %}
+{% block body %}
+{# `customerName` rides on every transaction view DTO Conduit sends, so the head
+   can name the customer without a second read; the transaction's own id is the
+   mono line under it, still the copyable identity. No name (an unreadable read,
+   or a customer whose identity record has resolved none) → the noun heads the
+   page, as it did before. #}
+{{ m.page_head('transaction', (txn.customerName if txn else '') or 'Transaction',
+               mono=transaction_id) }}
+<p class="row">
+  {% if txn %}
+    <span class="pill muted">{{ kind or 'unknown type' }}</span>
+    {{ m.statuspill('transactions', txn.status) }}
+    {% if stage %}<span class="muted">{{ stage }}</span>{% endif %}
+    {# Held on an RFI: the one thing about this payment an operator has to act
+       on, so it sits in the status line rather than below the fold. `warn` is
+       the "needs eyes" tone the RFI pills already use. #}
+    {% if awaiting %}<span class="pill warn">Held — information requested</span>{% endif %}
+    {% if txn.customerId %}
+      {# The id stays on screen even when the name is in the heading: it is what
+         an operator copies into Conduit's own tooling. #}
+      <a href="/customers/{{ txn.customerId }}">{% if txn.customerName %}{{ txn.customerName }} {% endif %}<code>{{ txn.customerId }}</code></a>
+    {% endif %}
+    {# Operator language, wire value after it (QA F-002) — the link still sends
+       the raw `type`, which is the only thing the endpoint answers to.
+
+       Only when Conduit actually stated a type. Without one this rendered "All
+       s" pointing at `?type=`, which is a filter for nothing: the list refuses
+       an empty `type` and the sentence names no kind. The pill above already
+       says "unknown type" — one honest statement of the gap is enough. #}
+    {% if kind %}
+      <a href="/transactions?type={{ kind }}">All {{ enum_label(kind)|lower }}s <span class="raw">{{ kind }}</span></a>
+    {% endif %}
+  {% endif %}
+</p>
+{# **The record's own figure**: the one number this page is
+   about, in the heading face at `--fs-hero` with `tabular-nums`, on its own
+   line under the status row. It was a 15px mono `<span>` wedged between two
+   pills and a link — the smallest thing in a row of chrome, on a page whose
+   entire subject is that amount.
+
+   Mono is given up deliberately. `--font-mono` is this console's mark for a
+   value an operator **copies, compares or reconciles** character by character
+   — an id, an IBAN, a reference — and this figure is not one of those: the
+   copyable identity of this record is the `<code>` id in the head above, which
+   keeps the mono face. An amount is read, not transcribed. Every amount in a
+   *cell* on this page and in the ledger is untouched and still mono at body
+   size, which is §2.3's split exactly.
+
+   Not in the pill row: at 44px it would set the row's line box and push the
+   pills off their own baseline. Its own line is also what makes it a summary
+   rather than another chip. #}
+{# `accounts.amount_of` answers "—" when neither side of the transaction states
+   an amount. A 44px em-dash is not a summary, so the line is simply absent
+   there — and absent claims nothing, where a hero zero would have. Everything
+   Conduit did send is in the table below either way. #}
+{% set headline_amount = amount_of(txn) if txn else '' %}
+{% if headline_amount and headline_amount != '—' %}
+  <p class="hero-num">{{ headline_amount }}</p>
+{% endif %}
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{% if txn %}
+  {% if not typed %}
+    {# plan v2 §7: a transaction kind this build has never heard of is shown as
+       Conduit sent it — never blank, never inferred. #}
+    <div class="card">
+      <strong>No typed view for <code>{{ kind or 'this type' }}</code></strong>
+      <p class="muted">Everything Conduit sent, rendered generically.</p>
+    </div>
+    <div class="table-scroll">
+    <table>
+      {% for row in generic_rows %}
+        <tr><th style="width:20rem">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+      {% endfor %}
+    </table>
+    </div>
+  {% else %}
+    <h2>Summary</h2>
+    <div class="table-scroll">
+    <table>
+      <tr><th style="width:16rem">Created</th><td>{{ txn.createdAt|ts }}</td></tr>
+      {% if converted %}
+        {# Both sides, because on a conversion leg the pair of amounts is the
+           content — the header can only carry one of them. #}
+        <tr><th>Converted</th><td class="num">{{ converted }}</td></tr>
+      {% endif %}
+      {% if txn.completedAt %}<tr><th>Completed</th><td>{{ txn.completedAt|ts }}</td></tr>{% endif %}
+      {% if txn.cancelledAt %}
+        <tr><th>Cancelled</th><td>{{ txn.cancelledAt|ts }} <span class="muted">{{ txn.cancellationReason or '' }}</span></td></tr>
+      {% endif %}
+      {% if txn.purpose %}<tr><th>Purpose</th><td>{{ txn.purpose }}</td></tr>{% endif %}
+      {% if txn.clientReferenceId %}
+        <tr><th>Client reference</th><td><code>{{ txn.clientReferenceId }}</code></td></tr>
+      {% endif %}
+      {% if txn.swiftUetr %}
+        {# ISO 20022 end-to-end reference — the id a correspondent bank will ask
+           for when someone rings up about a wire that has not landed. #}
+        <tr>
+          <th>SWIFT UETR</th>
+          <td>
+            <input type="text" id="copy-uetr" class="num" size="40" readonly
+                   value="{{ txn.swiftUetr }}" aria-label="SWIFT UETR">
+            <button type="button" data-copy="#copy-uetr">Copy</button>
+          </td>
+        </tr>
+      {% endif %}
+      {% if txn.linkedOrderId %}
+        {# The conversion (or chained payout) this movement belongs to — the
+           order page is where its rate, fees and execution live. #}
+        <tr><th>Linked order</th>
+          <td><a href="/orders/{{ txn.linkedOrderId }}"><code>{{ txn.linkedOrderId }}</code></a></td></tr>
+      {% endif %}
+      {% if received_via %}
+        {# Conduit's own transfer arm: this money arrived from another Conduit
+           account rather than off a rail. Label plus the raw enum, the house
+           pairing — the wire word stays on screen because it is what Conduit's
+           records and its support desk speak. The originating id is the only
+           thing joining the two halves of the transfer; the link says where to
+           look, and that page states for itself what can be read of it. #}
+        <tr><th>Received via</th>
+          <td>{{ enum_label(received_via) }} <code class="raw">{{ received_via }}</code>
+            {%- if originating_id %} — sent from another Conduit account as
+              <a href="/transactions/{{ originating_id }}"><code>{{ originating_id }}</code></a>
+            {%- endif %}</td></tr>
+      {% endif %}
+      {% if txn.remittance %}
+        <tr><th>Remittance</th><td>
+          {{ txn.remittance.reference or '' }}
+          {% if txn.remittance.description %}<div class="muted">{{ txn.remittance.description }}</div>{% endif %}
+        </td></tr>
+      {% endif %}
+    </table>
+    </div>
+
+    {% if txn.failureCode %}
+      <div class="problem" role="alert">
+        <strong>{{ txn.failureCode }}</strong>
+        {% if txn.failureMessage %}<div>{{ txn.failureMessage }}</div>{% endif %}
+      </div>
+    {% endif %}
+
+    <h2>{{ 'Sender' if kind == 'deposit' else 'Source' }}</h2>
+    <div class="table-scroll">
+    <table>
+      {% for row in source_rows %}
+        <tr><th style="width:20rem">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+      {% else %}
+        {# An internal transfer's whole sender side is the two facts Received-via
+           states above, so this table empties out — and "Conduit published no
+           detail" would then be the console describing its own suppression as
+           an absence at Conduit. Different fact, different sentence. #}
+        {% if received_via %}
+          <tr><td class="muted">Everything Conduit published for this side is in Received via, above.</td></tr>
+        {% else %}
+          <tr><td class="muted">Conduit published no detail for this side.</td></tr>
+        {% endif %}
+      {% endfor %}
+    </table>
+    </div>
+
+    <h2>Destination</h2>
+    <div class="table-scroll">
+    <table>
+      {% for row in destination_rows %}
+        <tr><th style="width:20rem">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+      {% else %}
+        <tr><td class="muted">Conduit published no detail for this side.</td></tr>
+      {% endfor %}
+    </table>
+    </div>
+
+    <h2>Fees</h2>
+    <div class="table-scroll">
+    <table>
+      <tr><th>Type</th><th>Charged by</th><th class="num">Amount</th></tr>
+      {% for fee in fees %}
+        <tr><td>{{ fee.type }}</td><td>{{ fee.owner }}</td><td class="num">{{ fee.amount }}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No fees on this transaction.</td></tr>
+      {% endfor %}
+      {% if markup %}
+        <tr>
+          <td>your markup</td>
+          <td>you</td>
+          <td class="num">
+            {{ markup.charged or markup.flat or '' }}
+            {% if markup.bps %}<div class="muted">{{ markup.bps }} bps</div>{% endif %}
+          </td>
+        </tr>
+      {% endif %}
+    </table>
+    </div>
+
+    {% if kind == 'withdrawal' and can_act %}
+      <h2>Actions</h2>
+      {% if operation and operation.pending %}
+        {# An earlier cancel is still unresolved. Offering the button again here
+           is how an operator double-cancels a payout that may already be
+           cancelled — the panel below says what is outstanding. #}
+        <p class="muted">
+          This console has an unresolved <code>{{ operation.op.type }}</code> against this payout —
+          see <strong>This console's record</strong> below before acting again.
+        </p>
+      {% elif can_cancel %}
+        <form hx-post="/transactions/{{ transaction_id }}/cancel"
+              hx-sync="this:drop" hx-disabled-elt="find button">
+          <input type="hidden" name="intent" value="{{ new_intent() }}">
+          <button type="submit" class="danger">Cancel this payout</button>
+          {{ m.working('Cancelling…') }}
+          <span class="muted">Only while it is still pending.</span>
+        </form>
+      {% else %}
+        <p class="muted">
+          {% if terminal %}This payout has reached a terminal state.
+          {% else %}Not cancellable in its current state.{% endif %}
+        </p>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+
+  {% if held %}
+    <h2>Requests for information</h2>
+    {% if awaiting %}
+      <div class="problem warn" role="alert">
+        <strong>Conduit has asked for more information</strong>
+        <div>This payment waits on the answer below. Attach what was asked for and send it.</div>
+      </div>
+    {% endif %}
+    {% with subject_type = 'transaction', subject_id = transaction_id %}
+      {% include "rfis/_panel.html" %}
+    {% endwith %}
+    {% if not rfis %}
+      {# `hasRfi` is Conduit's own derivation and it said yes, so an empty list
+         is a read that did not land — never "there is nothing". #}
+      <p class="muted">
+        Conduit says there is a request for information against this transaction
+        {% if txn.rfiId %}(<code>{{ txn.rfiId }}</code>){% endif %},
+        but the RFI itself could not be read just now. Refresh in a moment, or
+        find it on <a href="/rfis">the RFI list</a>.
+      </p>
+    {% elif not awaiting and not answered %}
+      {# Only when every round is genuinely finished. A `responded` RFI is
+         neither held nor settled, and its own card says which. #}
+      <p class="muted">Settled — nothing is owed on these.</p>
+    {% endif %}
+  {% endif %}
+
+  {% if operation %}
+    <h2>This console's record</h2>
+    {% include "operations/_panel.html" %}
+  {% endif %}
+
+  {% if is_sandbox() and can_simulate and kind in ('withdrawal', 'fiat_conversion') %}
+    <h2>Sandbox</h2>
+    <div class="card">
+      <p class="muted">
+        Sandbox host only — <code>/v2/sandbox</code> does not exist on staging or production, and
+        the route refuses to send there. Settling before the review is approved is refused by
+        Conduit; its own message is shown back to you.
+      </p>
+      <div class="row">
+      {% if kind == 'fiat_conversion' %}
+        {# A conversion leg is not a payout: the withdrawal simulators refuse it,
+           and `simulate/terminal` is the transaction-level forcer that settles
+           it. `completed` needs the conversion to have delivered funds already;
+           Conduit's own refusal is passed back when it has not. #}
+        {% for outcome in ['completed', 'failed'] %}
+          <form hx-post="/transactions/{{ transaction_id }}/simulate"
+                hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+            <input type="hidden" name="action" value="terminal">
+            <input type="hidden" name="outcome" value="{{ outcome }}">
+            <button type="submit">Force {{ outcome }}</button>{{ m.working() }}
+          </form>
+        {% endfor %}
+      {% else %}
+        {% for outcome in ['approve', 'reject'] %}
+          <form hx-post="/transactions/{{ transaction_id }}/simulate"
+                hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+            <input type="hidden" name="action" value="review">
+            <input type="hidden" name="outcome" value="{{ outcome }}">
+            <button type="submit">Simulate review {{ outcome }}</button>{{ m.working() }}
+          </form>
+        {% endfor %}
+        {% for outcome in ['completed', 'failed'] %}
+          <form hx-post="/transactions/{{ transaction_id }}/simulate"
+                hx-sync="this:drop" hx-disabled-elt="find button" style="display:inline">
+            <input type="hidden" name="action" value="settle">
+            <input type="hidden" name="outcome" value="{{ outcome }}">
+            <button type="submit">Simulate settle {{ outcome }}</button>{{ m.working() }}
+          </form>
+        {% endfor %}
+      {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

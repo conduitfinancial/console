@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}New onboarding · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('onboarding', 'Start an onboarding') }}
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{% if can_edit %}
+<form hx-post="/onboarding" class="card"
+      hx-target="main" hx-select="main" hx-swap="outerHTML"
+      hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+  <div class="field">
+    <label for="country">Country of the customer's primary jurisdiction *</label>
+    {# One sentence in front, the protocol behind a `<details>` (QA F-002's copy
+       half: "shorten primary instructions to one sentence and move protocol
+       details into expandable help"). Nothing is deleted — the country codes,
+       the endpoint and the who-decides-what caveat are all still here, one
+       disclosure away, which is where a detail an operator needs *once* belongs. #}
+    <div class="help">
+      A country code or name — type <code>BGR</code>, <code>IT</code> or “Bulgaria”.
+      <details>
+        <summary>What this decides</summary>
+        Conduit's own <code>GET /v2/onboarding/requirements</code> for this country is the whole
+        questionnaire: its fields, its documents and the people it asks about. The suggestions
+        below are ISO 3166-1 alpha-3 display names only — a full name is resolved to its code,
+        anything else is sent as typed, and Conduit decides which countries it serves.
+      </details>
+    </div>
+    {# The `pattern="[A-Za-z]{2,3}"` that used to be here refused a country
+       *name* in the browser before the server ever saw it — a client-side block
+       on the very input `resolve_country` exists to accept. Nothing was
+       validating with it: the server needs a non-empty value (below) and
+       Conduit's discovery is the only authority on which codes exist.
+       `autocapitalize` is off for the same reason: "BULGARIA" is not a name. #}
+    <input type="text" id="country" name="country" required
+           value="{{ country or '' }}" autocomplete="off" list="iso-countries">
+    {{ m.country_datalist() }}
+  </div>
+  {{ m.internal_reference(reference) }}
+  <p class="row">
+    <button type="submit" class="primary">Fetch requirements &amp; open a draft</button>
+    {{ m.working('Asking Conduit what this country needs…') }}
+  </p>
+</form>
+{% else %}
+<p class="muted">Reading applications and drafts is open to you; starting one needs the <code>onboarding.edit</code> permission.</p>
+{% endif %}
+{% endblock %}

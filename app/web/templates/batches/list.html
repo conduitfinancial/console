@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Batch payouts · Conduit Console{% endblock %}
+{% block body %}
+{% call m.page_head('transact', 'Batch payouts') %}
+  {% if can_act %}
+    <a class="btn primary" href="/customers/{{ customer_id }}/batches/new">New batch</a>
+  {% endif %}
+{% endcall %}
+<p class="muted lede">
+  Customer <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>. Every batch
+  this console has validated for them. A batch is a file and its results: correcting a file means
+  uploading it again, which makes a <strong>new</strong> batch — so the same payments may appear
+  here twice, once abandoned. Nothing on this page has been sent to Conduit.
+</p>
+
+{# Local rows only — no Conduit call, so this page reads when Conduit does not.
+   The counts come from the rows themselves rather than from a stored number,
+   which is why they cannot drift away from the report. #}
+{{ m.result_meta(request, rows|length, 'batch', per_page=pager.size) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Uploaded</th><th>File</th><th>Route</th><th>Rows</th><th>Status</th></tr>
+  {% for entry in rows %}
+    <tr {{ 'class="exception"'|safe if entry.invalid }}>
+      <td>{{ entry.batch.created_at|ts }}<div class="muted">{{ entry.batch.actor_email }}</div></td>
+      <td>
+        <a href="/customers/{{ customer_id }}/batches/{{ entry.batch.id }}">{{ entry.batch.filename }}</a>
+        <div class="muted"><code>{{ entry.batch.id }}</code></div>
+      </td>
+      <td>
+        {# The corridor, which is what a batch is keyed by. The purposes are the
+           rows' — the report lists them, and a list row has no space to. #}
+        {{ entry.batch.rail }}
+        <div class="muted">
+          {{ entry.batch.recipient_type }}{% if entry.batch.destination_country %} · {{ entry.batch.destination_country }}{% endif %}
+        </div>
+      </td>
+      <td class="num">
+        {{ entry.rows }}
+        {% if entry.invalid %}<div class="muted">{{ entry.invalid }} invalid</div>{% endif %}
+      </td>
+      <td>{{ m.statuspill('payout_batches', entry.batch.status) }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">
+      No batches for this customer yet. Pick a corridor on
+      <a href="/customers/{{ customer_id }}/batches/new">New batch</a> and download the template
+      for it — the columns come from that corridor's own live requirements, for every purpose.
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# This list stopped at 50 batches without saying so. #}
+{{ m.table_foot(pager) }}
+{% endblock %}

@@ -1,0 +1,112 @@
+{% import "macros.html" as m %}
+{# OPERATIONS_SPEC §5, one panel for both the application detail page and the
+   operation page. `outcome_unknown` gets no retry button on purpose. #}
+<div class="card">
+  <div class="row">
+    <strong>Submission</strong>
+    {{ m.statuspill('operations', operation.op.state) }}
+    <a href="/operations/{{ operation.op.id }}"><code>{{ operation.op.id }}</code></a>
+  </div>
+
+  {% if operation.op.state == 'outcome_unknown' %}
+    <p>
+      We sent <code>{{ operation.op.request_path }}</code> and did not get a definitive answer.
+      Conduit is being asked what happened — this resolves itself; do not resubmit.
+    </p>
+  {% elif operation.op.state == 'stalled' %}
+    <p>
+      We stopped asking after {{ operation.op.reconcile_count }} attempts
+      ({{ operation.op.attempt_count }} send(s), first unknown at
+      {{ operation.op.unknown_since|ts }}). Retrying re-sends the identical request with the
+      same idempotency key, so it cannot create a second one. Give support the operation id above
+      and the correlation id below.
+    </p>
+  {% endif %}
+
+  {% if operation.problem %}
+    {{ m.problem(operation.problem) }}
+    {# OPERATIONS_SPEC §4: a definitive conflict names the resource that already
+       exists (`details.customerId` on CUSTOMER_ALREADY_ONBOARDED). Generic — any
+       `details.*Id` renders, so no per-type template. #}
+    {% for label, value in operation.problem.existing %}
+      <p class="muted">existing {{ label }}: <code>{{ value }}</code></p>
+    {% endfor %}
+  {% endif %}
+
+  <div class="table-scroll">
+  <table>
+    <tr><th>Type</th><td><code>{{ operation.op.type }}</code></td></tr>
+    {# The operator's own note. Absent when unset rather than
+       an em-dash row: an optional label nobody wrote is not a missing value. #}
+    {% if operation.op.reference %}
+      <tr><th>Reference</th><td>{{ operation.op.reference }}</td></tr>
+    {% endif %}
+    {# Who this mutation was for. Absent when the operation names no customer
+       (an order execute, a cancel) rather than an em-dash row. The name comes
+       from the including page's resolver map where it has one — the order page
+       does — and is the bare id everywhere else, which is what the operations
+       page (a local read, no Conduit call) will always show. #}
+    {% if operation.op.customer_id %}
+      <tr><th>Customer</th>
+        <td>{{ m.customer_cell(names|default({}), operation.op.customer_id,
+               href='/customers/' ~ operation.op.customer_id) }}</td></tr>
+    {% endif %}
+    {# The saved destination this payment was addressed from.
+       The **label only** — never coordinates, masked or otherwise: this is a
+       page about a payment, and the address book is a page of its own. Absent
+       when the operator typed the destination by hand, and on every page whose
+       resource cannot have one. #}
+    {% if operation.counterparty %}
+      <tr><th>Contact</th><td>
+        {# Linked back to the contact it names — the row used to state a label and leave
+           the operator to go and find it. The anchor is the row's own id on the
+           Contacts page. Only where both halves are known: a row written before the id
+           was recorded on both actions, and an operation with no customer, still render
+           the plain label. #}
+        {% if operation.counterparty.id and operation.op.customer_id %}
+          <a href="/customers/{{ operation.op.customer_id }}/contacts#contact-{{ operation.counterparty.id }}">{{ operation.counterparty.label }}</a>
+        {% else %}{{ operation.counterparty.label }}{% endif %}
+      </td></tr>
+    {% endif %}
+    <tr><th>Actor</th><td>{{ operation.op.actor_email }}</td></tr>
+    <tr><th>Created</th><td>{{ operation.op.created_at|ts }}</td></tr>
+    <tr><th>Attempts</th><td>{{ operation.op.attempt_count }} sent · {{ operation.op.reconcile_count }} reconciled</td></tr>
+    {% if operation.op.conduit_resource_id %}
+      <tr><th>Resource</th><td><code>{{ operation.op.conduit_resource_id }}</code></td></tr>
+    {% endif %}
+  </table>
+  </div>
+
+  {# Both carry the house pair every other mutating form in this console carries.
+     These two were the only ones without it: a second click on Retry re-entered
+     a send the first click had already started, and Mark abandoned is a state
+     change that releases the duplicate guard — neither is a button to leave
+     double-clickable, and this panel lives inside a region that re-renders on a
+     poll. #}
+  {% if operation.can_retry and can_retry %}
+    <form hx-post="/operations/{{ operation.op.id }}/retry" style="display:inline"
+          hx-sync="this:drop" hx-disabled-elt="find button">
+      <button type="submit" class="primary">Retry (same idempotency key)</button>
+      {{ m.working('Re-sending…') }}
+    </form>
+  {% endif %}
+  {% if operation.can_abandon and can_abandon %}
+    <form hx-post="/operations/{{ operation.op.id }}/abandon" style="display:inline"
+          hx-sync="this:drop" hx-disabled-elt="find button">
+      <button type="submit" class="danger">Mark abandoned</button>{{ m.working() }}
+    </form>
+    {# Derived from the handler + OPERATIONS_SPEC §1/§2, not from what the button
+       sounds like: it is a local state change only — no Conduit call — and its
+       whole effect is releasing the request-hash guard. It does NOT release the
+       intent nonce, which `operations.start` checks first and in *every* state
+       (service.py's guard 1): a browser mechanically re-sending the identical
+       body still resolves to this abandoned row. Only a freshly rendered form
+       mints a new intent — so that, not "an identical resubmit", is what the
+       sentence is allowed to promise. #}
+    <span class="muted">
+      Closes this record without an answer. It tells Conduit nothing, and the original request
+      may still have landed — abandoning only releases the duplicate guard, so
+      re-submitting from a freshly loaded form becomes a new operation with a new idempotency key.
+    </span>
+  {% endif %}
+</div>

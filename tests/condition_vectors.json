@@ -1,0 +1,937 @@
+{
+  "about": "Language-neutral conformance vectors for FORM_ENGINE_SPEC \u00a74. Executed by app/forms.py::evaluate_field (pytest) and static/conditions.js::evaluateField (node). Both must agree; disagreement fails the build. Each case: apply `conditions` (AND-ed) + `requiredWhen` + base `required` to `root`/`person`, expect `{active, required}`.",
+  "cases": [
+    {
+      "name": "eq: match",
+      "conditions": [
+        {
+          "path": "companyClassification.primaryIndustry",
+          "operator": "eq",
+          "value": "other_industry",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "companyClassification": {
+          "primaryIndustry": "other_industry"
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: mismatch",
+      "conditions": [
+        {
+          "path": "companyClassification.primaryIndustry",
+          "operator": "eq",
+          "value": "other_industry",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "companyClassification": {
+          "primaryIndustry": "accounting_and_auditing"
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: absent key",
+      "conditions": [
+        {
+          "path": "companyClassification.primaryIndustry",
+          "operator": "eq",
+          "value": "other_industry",
+          "scope": "root"
+        }
+      ],
+      "root": {},
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: empty string is absent",
+      "conditions": [
+        {
+          "path": "a",
+          "operator": "eq",
+          "value": "",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "a": ""
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: numeric",
+      "conditions": [
+        {
+          "path": "count",
+          "operator": "eq",
+          "value": 3,
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "count": 3
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: zero is present",
+      "conditions": [
+        {
+          "path": "count",
+          "operator": "eq",
+          "value": 0,
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "count": 0
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "in: scalar hit",
+      "conditions": [
+        {
+          "path": "rail",
+          "operator": "in",
+          "values": [
+            "fedwire",
+            "ach"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "rail": "ach"
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "in: scalar miss",
+      "conditions": [
+        {
+          "path": "rail",
+          "operator": "in",
+          "values": [
+            "fedwire",
+            "ach"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "rail": "swift"
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "in: absent",
+      "conditions": [
+        {
+          "path": "rail",
+          "operator": "in",
+          "values": [
+            "fedwire"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {},
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "in: enumArray gate is intersection (fixture: regulatedOrRestrictedActivities)",
+      "conditions": [
+        {
+          "path": "businessActivity.regulatedOrRestrictedActivities",
+          "operator": "in",
+          "values": [
+            "other_regulated_activity"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessActivity": {
+          "regulatedOrRestrictedActivities": [
+            "forex_and_currency_exchange",
+            "other_regulated_activity"
+          ]
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "in: enumArray with no overlap",
+      "conditions": [
+        {
+          "path": "businessActivity.regulatedOrRestrictedActivities",
+          "operator": "in",
+          "values": [
+            "other_regulated_activity"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessActivity": {
+          "regulatedOrRestrictedActivities": [
+            "forex_and_currency_exchange"
+          ]
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "in: empty list is absent",
+      "conditions": [
+        {
+          "path": "tags",
+          "operator": "in",
+          "values": [
+            "x"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "tags": []
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "not_in: present and outside the set",
+      "conditions": [
+        {
+          "path": "country",
+          "operator": "not_in",
+          "values": [
+            "HKG",
+            "PAN"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "country": "DEU"
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "not_in: present and inside the set",
+      "conditions": [
+        {
+          "path": "country",
+          "operator": "not_in",
+          "values": [
+            "HKG",
+            "PAN"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "country": "HKG"
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "not_in: absent is false (an unanswered gate never activates dependents)",
+      "conditions": [
+        {
+          "path": "country",
+          "operator": "not_in",
+          "values": [
+            "HKG"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {},
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "not_in: enumArray with a hit",
+      "conditions": [
+        {
+          "path": "tags",
+          "operator": "not_in",
+          "values": [
+            "x"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "tags": [
+          "x",
+          "y"
+        ]
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: present",
+      "conditions": [
+        {
+          "path": "businessInfo.taxId",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {
+          "taxId": "123456789"
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: absent key",
+      "conditions": [
+        {
+          "path": "businessInfo.taxId",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {}
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: empty string",
+      "conditions": [
+        {
+          "path": "businessInfo.taxId",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {
+          "taxId": ""
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: null",
+      "conditions": [
+        {
+          "path": "businessInfo.taxId",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {
+          "taxId": null
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: false is present",
+      "conditions": [
+        {
+          "path": "flag",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "flag": false
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "is_true: true (fixture: hasRegulatedOrRestrictedActivities)",
+      "conditions": [
+        {
+          "path": "businessActivity.hasRegulatedOrRestrictedActivities",
+          "operator": "is_true",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessActivity": {
+          "hasRegulatedOrRestrictedActivities": true
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "is_true: false",
+      "conditions": [
+        {
+          "path": "businessActivity.hasRegulatedOrRestrictedActivities",
+          "operator": "is_true",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessActivity": {
+          "hasRegulatedOrRestrictedActivities": false
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "is_true: absent",
+      "conditions": [
+        {
+          "path": "businessActivity.hasRegulatedOrRestrictedActivities",
+          "operator": "is_true",
+          "scope": "root"
+        }
+      ],
+      "root": {},
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "is_false: false (fixture: operatingAddress.sameAsRegistered)",
+      "conditions": [
+        {
+          "path": "operatingAddress.sameAsRegistered",
+          "operator": "is_false",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "operatingAddress": {
+          "sameAsRegistered": false
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "is_false: true",
+      "conditions": [
+        {
+          "path": "operatingAddress.sameAsRegistered",
+          "operator": "is_false",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "operatingAddress": {
+          "sameAsRegistered": true
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "is_false: absent is false for both boolean operators",
+      "conditions": [
+        {
+          "path": "operatingAddress.sameAsRegistered",
+          "operator": "is_false",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "operatingAddress": {}
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "AND: both hold",
+      "conditions": [
+        {
+          "path": "a",
+          "operator": "is_true",
+          "scope": "root"
+        },
+        {
+          "path": "b",
+          "operator": "eq",
+          "value": "x",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "a": true,
+        "b": "x"
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "AND: second fails",
+      "conditions": [
+        {
+          "path": "a",
+          "operator": "is_true",
+          "scope": "root"
+        },
+        {
+          "path": "b",
+          "operator": "eq",
+          "value": "x",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "a": true,
+        "b": "y"
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "AND: empty condition list is always active",
+      "conditions": [],
+      "root": {},
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "person scope: resolved inside the card",
+      "conditions": [
+        {
+          "path": "immigrationStatus",
+          "operator": "eq",
+          "value": "visa_holder",
+          "scope": "person"
+        }
+      ],
+      "root": {
+        "immigrationStatus": "citizen"
+      },
+      "person": {
+        "immigrationStatus": "visa_holder"
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "person scope: root value must not leak in",
+      "conditions": [
+        {
+          "path": "immigrationStatus",
+          "operator": "eq",
+          "value": "citizen",
+          "scope": "person"
+        }
+      ],
+      "root": {
+        "immigrationStatus": "citizen"
+      },
+      "person": {},
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "root scope: evaluated from inside a person card",
+      "conditions": [
+        {
+          "path": "businessInfo.country",
+          "operator": "eq",
+          "value": "USA",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {
+          "country": "USA"
+        }
+      },
+      "person": {
+        "businessInfo": {
+          "country": "BGR"
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "requiredWhen: notIn holds -> visible AND required",
+      "required": false,
+      "requiredWhen": {
+        "path": "destination.recipient.postalAddress.country",
+        "operator": "not_in",
+        "values": [
+          "HKG",
+          "PAN"
+        ],
+        "scope": "root"
+      },
+      "root": {
+        "destination": {
+          "recipient": {
+            "postalAddress": {
+              "country": "DEU"
+            }
+          }
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": true
+      }
+    },
+    {
+      "name": "requiredWhen: notIn fails -> optional but still VISIBLE",
+      "required": false,
+      "requiredWhen": {
+        "path": "destination.recipient.postalAddress.country",
+        "operator": "not_in",
+        "values": [
+          "HKG",
+          "PAN"
+        ],
+        "scope": "root"
+      },
+      "root": {
+        "destination": {
+          "recipient": {
+            "postalAddress": {
+              "country": "HKG"
+            }
+          }
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "requiredWhen: gate unanswered -> optional but still VISIBLE",
+      "required": false,
+      "requiredWhen": {
+        "path": "destination.recipient.postalAddress.country",
+        "operator": "not_in",
+        "values": [
+          "HKG"
+        ],
+        "scope": "root"
+      },
+      "root": {},
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "requiredWhen never overrides a base-required field",
+      "required": true,
+      "requiredWhen": {
+        "path": "x",
+        "operator": "is_true",
+        "scope": "root"
+      },
+      "root": {
+        "x": false
+      },
+      "expect": {
+        "active": true,
+        "required": true
+      }
+    },
+    {
+      "name": "conditions hide, requiredWhen does not: inactive field with a satisfied requiredWhen",
+      "required": false,
+      "conditions": [
+        {
+          "path": "gate",
+          "operator": "is_true",
+          "scope": "root"
+        }
+      ],
+      "requiredWhen": {
+        "path": "country",
+        "operator": "not_in",
+        "values": [
+          "HKG"
+        ],
+        "scope": "root"
+      },
+      "root": {
+        "gate": false,
+        "country": "DEU"
+      },
+      "expect": {
+        "active": false,
+        "required": true
+      }
+    },
+    {
+      "name": "unknown operator is inert, never a crash",
+      "conditions": [
+        {
+          "path": "a",
+          "operator": "matches_regex",
+          "value": ".*",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "a": "anything"
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: true is not 1 (Python bool/int vs JS ===)",
+      "conditions": [
+        {
+          "path": "flags.consented",
+          "operator": "eq",
+          "value": 1,
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "flags": {
+          "consented": true
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: false is not 0",
+      "conditions": [
+        {
+          "path": "flags.consented",
+          "operator": "eq",
+          "value": 0,
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "flags": {
+          "consented": false
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "in: a boolean never matches a numeric candidate",
+      "conditions": [
+        {
+          "path": "flags.consented",
+          "operator": "in",
+          "values": [
+            1,
+            "yes"
+          ],
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "flags": {
+          "consented": true
+        }
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "eq: the largest integer both sides hold exactly",
+      "conditions": [
+        {
+          "path": "counts.shares",
+          "operator": "eq",
+          "value": 9007199254740991,
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "counts": {
+          "shares": 9007199254740991
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: an inherited property is not a value (JS prototype chain)",
+      "conditions": [
+        {
+          "path": "constructor",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {}
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "exists: a nested inherited property is not a value either",
+      "conditions": [
+        {
+          "path": "businessInfo.toString",
+          "operator": "exists",
+          "scope": "root"
+        }
+      ],
+      "root": {
+        "businessInfo": {}
+      },
+      "expect": {
+        "active": false,
+        "required": false
+      }
+    },
+    {
+      "name": "requiredWhen: fires on the answer that makes the field mandatory",
+      "conditions": [],
+      "requiredWhen": {
+        "path": "destination.rail",
+        "operator": "in",
+        "values": [
+          "swift"
+        ],
+        "scope": "root"
+      },
+      "required": false,
+      "root": {
+        "destination": {
+          "rail": "swift"
+        }
+      },
+      "expect": {
+        "active": true,
+        "required": true
+      }
+    },
+    {
+      "name": "requiredWhen: optional-but-visible while the gate is unanswered",
+      "conditions": [],
+      "requiredWhen": {
+        "path": "destination.rail",
+        "operator": "in",
+        "values": [
+          "swift"
+        ],
+        "scope": "root"
+      },
+      "required": false,
+      "root": {
+        "destination": {}
+      },
+      "expect": {
+        "active": true,
+        "required": false
+      }
+    }
+  ]
+}

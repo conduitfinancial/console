@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Applications · Conduit Console{% endblock %}
+{% block body %}
+{# The page-head primary is gone (2026-09-02). This page is
+   where you come to see what Conduit is deciding; what an operator does about a
+   row here is open it, answer its RFI, or fix and resubmit — never "start
+   another one", which is the Onboard page's verb and now the chrome's. Its own
+   comment gave it away: "the ONLY thing an operator starts from here", which is
+   an argument from the absence of a better candidate rather than from this
+   page's job. The empty state keeps its link. #}
+{{ m.page_head('customers', 'Applications',
+   'Everything this organization has asked Conduit to decide — onboardings and feature requests alike.') }}
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/applications" class="bar row"
+      hx-get="/applications" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  {# The page size has to survive a filter submit as well as a page turn. #}
+  <input type="hidden" name="limit" value="{{ limit }}">
+  {# The placeholder used to read "name, id…", which is the spec's phrasing
+     ("Free-text search across application fields") rather than what the
+     endpoint does — see the muted line under this form. #}
+  {# Labelled for what it matches, not for the parameter it sends (QA F-005): a
+     box called "Search" promises names and ids, and this one answered an
+     application id with an empty table. `name="search"` is unchanged — the
+     label is the operator's word for it, `search` is Conduit's. #}
+  <label>Client reference <input type="text" name="search" value="{{ search }}"
+         placeholder="exact, whole string"></label>
+  {# The name-aware half of this form. `search` cannot find a person; this can,
+     because the datalist turns the name the operator knows into the `cus_…`
+     the endpoint wants. Same input the Customers rows' Applications link has
+     always sent, now typeable. #}
+  <label>Customer <input type="text" name="customerId" value="{{ customer_id }}"
+         list="known-customers" placeholder="name or cus_…"></label>
+  {{ m.customer_datalist(customers) }}
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      {% for state in statuses %}
+        <option value="{{ state }}" {{ 'selected' if state in selected_status }}>{{ state }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Type
+    <select name="type">
+      <option value="">any</option>
+      {# `enum_option`: operator language first, the wire value after it, in the
+         one string an `<option>` can hold (QA F-002). The `value` attribute —
+         what this filter actually sends — is untouched. #}
+      {% for value in types %}
+        <option value="{{ value }}" {{ 'selected' if value in selected_types }}>{{ enum_option(value) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/applications">Reset</a>
+</form>
+
+{# What Search actually matched when it was probed **on the sandbox**
+   (2026-08-29): the `clientReferenceId` your own submission carried, in full
+   and in the same case. A person's name, a legal name, an `app_…` and a `cus_…`
+   all returned nothing. The pinned contract calls the parameter free-text, and
+   one environment's behaviour is not every environment's — so the sentence is
+   scoped to where it was observed rather than asserted of the API. Either way
+   the Customer box is the reliable route to "who is this for", so the advice is
+   the same in both worlds. #}
+<p class="muted">
+  On the sandbox, this box matched only a client reference — the whole string, exactly — and no
+  name or id. Conduit documents it as free text, so it may do more elsewhere; to find an
+  application by who it is for, the Customer box is the sure way, and it sends Conduit the id.
+</p>
+{% if customers_more %}
+  {# The suggestions are the first cursor page, not the customer list. Said out
+     loud rather than left to a tooltip: a name-completion list that quietly
+     stops at 25 would let an operator conclude a customer does not exist. #}
+  <p class="muted">Customer suggestions are the first 25 —
+    <a href="/customers">find the rest in Customers</a>.</p>
+{% endif %}
+
+{# `GET /v2/applications` takes no sort parameter, so this line does not claim an
+   order the request never asked for. `page.total` is Conduit's own `meta.total`
+   where it sends one — the only place "of M" is allowed to appear. #}
+{{ m.result_meta(request, page.items|length, 'application', problem=problem,
+                 total=page.total, per_page=limit,
+                 export=export_url(request, 'applications')) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Application</th><th>Type</th><th>Status</th><th>Customer</th><th>Legal entity</th>
+      <th>Client reference</th><th>Updated</th></tr>
+  {% for item in page.items %}
+    {# The row flag follows the *pill*, not the raw status: a rejection Conduit
+       will reconsider is amber, and a red exception bar beside an amber pill
+       would tell the operator two different things about one row. Every other
+       list still asks `is_exception` directly — only applications have a status
+       whose family depends on a second field. #}
+    <tr {{ 'class="exception"'|safe if application_pill(item).tone == 'bad' }}>
+      {# Two affordances on one row, deliberately side by side and deliberately
+         in the FIRST cell. Side by side because they do different things: the
+         id is the record, the button is a look at it without leaving the list —
+         and making the whole row open a drawer would have taken the record away
+         from anyone who wanted it. In the first cell because a right-fixed
+         drawer covers the right-hand end of a full-width table: an action column
+         at the far end would be under the panel the moment one was open, so a
+         second row could not be previewed without dismissing the first.
+
+         `hx-target` is the shell's inner div rather than the `<aside>` itself,
+         so the shell keeps the indicator an `innerHTML` swap would replace.
+         `aria-label` names the row — "Quick view" repeated twenty-five times
+         tells a screen reader nothing about which one.
+
+         `hx-sync="#drawer:replace"` is load-bearing, not tidiness. Without it
+         every row's button races every other row's into ONE panel: a slow
+         answer for row A can land after a fast answer for row B and leave A's
+         facts on screen under the operator's belief that they opened B — one
+         application's status read as another's, which is the single worst thing
+         this drawer could do. The sync master is `#drawer` deliberately: it is
+         the resource these requests actually contend for, htmx records the
+         in-flight xhr on the master (verified in the vendored 2.0.4 source), and
+         naming it here is what lets `static/app.js` abort the same request by
+         id without re-deriving a selector. `replace` fires `htmx:abort` on the
+         master before issuing the new request, so the loser is cancelled rather
+         than merely ignored — and an aborted xhr raises `htmx:sendAbort`, never
+         `sendError`, so it cannot reach the drawer's failure render. #}
+      <td><a href="/applications/{{ item.id }}"><code>{{ item.id }}</code></a>
+        <button type="button" class="btn quick" data-quick
+                aria-label="Quick view — {{ item.id }}"
+                hx-get="/applications/{{ item.id }}/quick"
+                hx-target="#drawer-body" hx-swap="innerHTML" hx-indicator="#drawer"
+                hx-sync="#drawer:replace">
+          Quick view</button></td>
+      {# Same vocabulary as the Type filter above it, or the two would name the
+         same thing differently on one screen. The wire value is on the cell
+         rather than under it: a second mono line on every row of a dense table
+         costs more than it tells. #}
+      <td {% if item.type %}title="{{ item.type }}"{% endif %}>{{ enum_label(item.type) or '—' }}</td>
+      {# The whole row, not the status string: a rejection Conduit will
+         reconsider reads differently from a final one (`application_pill`). The
+         reviewer's own sentence goes under it, truncated — it is the one line
+         that says *why*, and the detail page carries it in full. #}
+      <td>
+        {{ m.app_statuspill(item) }}
+        {% if item.failureMessage %}
+          <div class="muted" title="{{ item.failureMessage }}">{{ item.failureMessage|truncate(90, True, '…', 0) }}</div>
+        {% endif %}
+      </td>
+      {# An application DTO carries no name at all, so the name here is the
+         resolver's map or nothing. The link is unchanged: this customer's other
+         applications. #}
+      <td>{{ m.customer_cell(names, item.customerId,
+             href='/applications?customerId=' ~ (item.customerId or '')) }}</td>
+      {# Both from `operations.local_notes`, because the DTO carries neither.
+         The entity name falls back the way `display_name` does — the resolved
+         customer first, then the name submitted in the body, which is the only
+         one an application in review has at all (its customer does not exist
+         yet). The reference is the operator's OWN note: `item.clientReferenceId`
+         is `op.id`, overwritten by `execute.outbound_body`, so the column that
+         read it was showing this console's operation id under a heading that
+         promised the operator's. #}
+      {% set note = notes.get(item.id) or {} %}
+      {% set entity = names.get(item.customerId) or note.legal_name %}
+      <td>{% if entity %}{{ entity }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if note.reference %}<code>{{ note.reference }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{{ (item.updatedAt or item.createdAt)|ts }}</td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts; the count
+       above already refuses to merge them, and so must the row that replaces
+       the rows (recipients/list.html is the house model). #}
+    <tr><td colspan="7" class="muted">
+      {% if problem %}The list could not be read — see above.
+      {% else %}No applications on this page. Widen the filters above, or
+      <a href="/onboarding">start an onboarding</a> — every submission shows up here.{% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# Server-built, filters and page size carried across the page turn
+   (app/web/__init__.py::pager). #}
+{{ m.table_foot(pager) }}
+
+{# The drawer shell: rendered once, empty, and filled by whichever row's Quick
+   view button was pressed (`applications/_quick.html`).
+
+   **Non-modal, deliberately.** `role="complementary"` and a label, NOT
+   `role="dialog"` + `aria-modal` — and nothing else on the page is made `inert`
+   or `aria-hidden`, there is no focus trap and there is no scrim. A quick view
+   is a look at one row while the list stays readable behind it; the modal
+   grammar would make dismissing it a required step before an operator could go
+   back to scanning, which is more ceremony than the full page it previews.
+   `static/app.js` moves focus in on open and back to the invoking button on
+   close, and Escape / a click outside dismiss it — the affordances a
+   keyboard operator needs without the takeover they do not.
+
+   `tabindex="-1"` is what lets focus land on the region itself, so the label
+   and the panel's first line are what a screen reader reads on open.
+
+   The indicator lives in the shell rather than in the swapped body: it has to
+   survive the swap that replaces the body, and it has to be on screen while the
+   body is still empty. `hx-indicator="#drawer"` on each button is what puts
+   `htmx-request` here. #}
+<aside id="drawer" role="complementary" aria-label="Application quick view" tabindex="-1">
+  {# Close belongs to the SHELL, not to the body: it is then the one dismiss in
+     every state the body can be in — loaded, failed, still loading — and
+     neither the fragment nor `static/app.js` has to render one of its own. It
+     also stays put while a long body scrolls under it. #}
+  <div class="drawer-chrome">
+    <span class="micro-label">Quick view</span>
+    {{ m.working('Loading…') }}
+    <button type="button" class="btn" data-drawer-close>Close</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+{% endblock %}

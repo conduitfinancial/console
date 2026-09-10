@@ -1,0 +1,63 @@
+{
+  "clientReferenceId": "zzztest-console-940a80c3b6c7",
+  "createdAt": "2026-08-28T18:36:01.331Z",
+  "customerId": "cus_033TljKNH86Bxo7mUeGIpx",
+  "customerName": "QA Display All-Green Corp",
+  "destination": {
+    "assetAmount": {
+      "amount": "11.00",
+      "code": "USD"
+    },
+    "recipient": {
+      "accountNumber": "000123456789",
+      "accountType": "checking",
+      "bankAddress": {
+        "addressLine1": "500 Market St",
+        "city": "New York",
+        "country": "USA",
+        "postalCode": "10010",
+        "state": "US-NY"
+      },
+      "legalName": "ZZZTEST Globex Supplies 940a80c3b6c7",
+      "postalAddress": {
+        "addressLine1": "500 Market St",
+        "city": "New York",
+        "country": "USA",
+        "postalCode": "10010",
+        "state": "US-NY"
+      },
+      "rail": "us",
+      "routingNumber": "021000021",
+      "type": "business"
+    },
+    "type": "external_bank"
+  },
+  "fees": [
+    {
+      "assetAmount": {
+        "amount": "0.25",
+        "code": "USD"
+      },
+      "owner": "conduit",
+      "type": "fixed"
+    }
+  ],
+  "hasRfi": false,
+  "id": "txn_034F81CcYqCVgifODldDwt",
+  "purpose": "payment_for_goods_or_services",
+  "remittance": {
+    "reference": "ZZZTEST-940a80c3b6c7"
+  },
+  "requiresUserSignature": false,
+  "source": {
+    "assetAmount": {
+      "amount": "11.25",
+      "code": "USD"
+    },
+    "type": "virtual_account",
+    "virtualAccountId": "vac_033tVRIHe2Ej5mLRrW2KdD"
+  },
+  "stage": "settling",
+  "status": "pending",
+  "type": "withdrawal"
+}

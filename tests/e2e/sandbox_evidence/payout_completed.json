@@ -1,0 +1,64 @@
+{
+  "clientReferenceId": "3149eac0-46bb-405e-8c92-48220957bef5",
+  "completedAt": "2026-08-31T03:26:46.569Z",
+  "createdAt": "2026-08-31T03:26:41.235Z",
+  "customerId": "cus_034GTiOfAFAhfDVahyir2N",
+  "customerName": "ZZZTEST Sweep 1c66c5ce43 EOOD",
+  "destination": {
+    "assetAmount": {
+      "amount": "10.00",
+      "code": "USD"
+    },
+    "fedwireImad": "681f0c15043137a96501c76d287d7423",
+    "recipient": {
+      "accountNumber": "000123456789",
+      "accountType": "checking",
+      "bankAddress": {
+        "addressLine1": "500 Market St",
+        "city": "New York",
+        "country": "USA",
+        "postalCode": "10010",
+        "state": "US-NY"
+      },
+      "legalName": "ZZZTEST Sweep 1c66c5ce43 EOOD",
+      "postalAddress": {
+        "addressLine1": "500 Market St",
+        "city": "New York",
+        "country": "USA",
+        "postalCode": "10010",
+        "state": "US-NY"
+      },
+      "rail": "us",
+      "routingNumber": "021000021",
+      "type": "business"
+    },
+    "type": "external_bank"
+  },
+  "fees": [
+    {
+      "assetAmount": {
+        "amount": "0.25",
+        "code": "USD"
+      },
+      "owner": "conduit",
+      "type": "fixed"
+    }
+  ],
+  "hasRfi": false,
+  "id": "txn_034GTifhqkNG18QLQBEPgY",
+  "purpose": "intercompany",
+  "remittance": {
+    "reference": "ZZZTEST-1c66c5ce43"
+  },
+  "requiresUserSignature": false,
+  "source": {
+    "assetAmount": {
+      "amount": "10.25",
+      "code": "USD"
+    },
+    "type": "virtual_account",
+    "virtualAccountId": "vac_034GTiS4gzawZXXhZkOhLv"
+  },
+  "status": "completed",
+  "type": "withdrawal"
+}

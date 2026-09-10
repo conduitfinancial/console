@@ -1,0 +1,114 @@
+{
+  "amount": {
+    "amount": "1000.00",
+    "code": "USD"
+  },
+  "createdAt": "2026-08-28T20:19:16.253Z",
+  "destinationAssetRef": {
+    "code": "USD"
+  },
+  "expiresAt": "2026-08-28T20:24:16.253Z",
+  "id": "qte_034FAYIcrIdydLTLWaLM7F",
+  "lockSide": "source",
+  "options": [
+    {
+      "destinationAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "fees": [
+        {
+          "assetAmount": {
+            "amount": "0.25",
+            "code": "USD"
+          },
+          "charge": "payout",
+          "owner": "conduit",
+          "type": "fixed"
+        }
+      ],
+      "id": "qop_034FAYIlFAwWKIYeNbHjYx",
+      "rail": "fedwire",
+      "rate": null,
+      "recipientAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "sourceAmount": {
+        "amount": "1000.00",
+        "code": "USD"
+      },
+      "totalDebit": {
+        "amount": "1000.00",
+        "code": "USD"
+      }
+    },
+    {
+      "destinationAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "fees": [
+        {
+          "assetAmount": {
+            "amount": "0.25",
+            "code": "USD"
+          },
+          "charge": "payout",
+          "owner": "conduit",
+          "type": "fixed"
+        }
+      ],
+      "id": "qop_034FAYIlF2WiySWFm6sTGA",
+      "rail": "ach",
+      "rate": null,
+      "recipientAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "sourceAmount": {
+        "amount": "1000.00",
+        "code": "USD"
+      },
+      "totalDebit": {
+        "amount": "1000.00",
+        "code": "USD"
+      }
+    },
+    {
+      "destinationAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "fees": [
+        {
+          "assetAmount": {
+            "amount": "0.25",
+            "code": "USD"
+          },
+          "charge": "payout",
+          "owner": "conduit",
+          "type": "fixed"
+        }
+      ],
+      "id": "qop_034FAYIl8plgGkjU9ENld0",
+      "rail": "swift",
+      "rate": null,
+      "recipientAmount": {
+        "amount": "999.75",
+        "code": "USD"
+      },
+      "sourceAmount": {
+        "amount": "1000.00",
+        "code": "USD"
+      },
+      "totalDebit": {
+        "amount": "1000.00",
+        "code": "USD"
+      }
+    }
+  ],
+  "sourceAssetRef": {
+    "code": "USD"
+  }
+}

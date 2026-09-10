@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}RFIs · Conduit Console{% endblock %}
+{% block body %}
+{# **No action pill, deliberately**. Only Conduit creates an
+   RFI; this console has no "raise one" verb to offer and inventing a pill here
+   would be the chrome promising an action the API does not have. Answering is
+   not it either — a response belongs to the subject the RFI is about, which is
+   what every row already links to. The emptiness is the design. #}
+{{ m.page_head('customers', 'Requests for information',
+   "Everything Conduit is asking for, across every subject. Answering happens on the subject's own page — the request title opens it.") }}
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/rfis" class="bar row"
+      hx-get="/rfis" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <input type="hidden" name="limit" value="{{ limit }}">
+  <label>Subject type
+    <select name="subjectType">
+      <option value="">any</option>
+      {% for value in subject_types %}
+        <option value="{{ value }}" {{ 'selected' if value == subject_type }}>{{ enum_option(value) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {# The toggle is the whole status filter: open + responded is what still owes
+     Conduit an answer, and the second segment adds the two that no longer do.
+     `draft` is never requested — Conduit does not serve drafts on this surface.
+     Two radios rather than the checkbox this was: the route reads
+     `include == "settled"`, so the off state was only ever expressible as an
+     absent parameter, and a lone unticked box says what it excludes but never
+     what it is currently showing. Both states are now on screen and one of them
+     is always filled. #}
+  <label id="rfi-scope">Show</label>
+  <div class="segmented" role="group" aria-labelledby="rfi-scope">
+    <label><input type="radio" name="include" value="" {{ '' if settled else 'checked' }}> Open only</label>
+    <label><input type="radio" name="include" value="settled" {{ 'checked' if settled }}> Include resolved and cancelled</label>
+  </div>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/rfis">Reset</a>
+</form>
+
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{# No `newest`: this request carries no sort parameter, so claiming an order
+   would be describing Conduit's default rather than what the console asked for. #}
+{{ m.result_meta(request, rows|length, 'RFI', problem=problem, per_page=limit,
+                 export=export_url(request, 'rfis')) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Request</th><th>Subject</th><th>Status</th><th>Due</th><th>Published</th></tr>
+  {% for row in rows %}
+    <tr>
+      <td>
+        {# The link goes to the subject, never to an RFI page: the respond form
+           already lives there (app/web/applications.py), and a second one here
+           is a second thing to keep in step. An RFI whose only subjects are
+           kinds this console has no page for is text — never a link to a 404. #}
+        {% if row.target %}
+          <a href="{{ row.target }}">{{ (row.rfi.title or '')|truncate(80, true) }}</a>
+        {% else %}
+          {{ (row.rfi.title or '')|truncate(80, true) }}
+        {% endif %}
+        {% if row.rfi.summary %}<div class="muted">{{ row.rfi.summary|truncate(140, true) }}</div>{% endif %}
+        <div class="muted"><code>{{ row.rfi.id }}</code></div>
+      </td>
+      <td>
+        {% for subject in row.subjects %}
+          <div>
+            <span class="muted">{{ subject.kind }}</span>
+            {# A `customer` subject gets its name from the resolver's bounded
+               page; the other three kinds have no name to resolve, so
+               `customer_cell` is only asked about that one and everything else
+               renders exactly as it did — the id, linked where this console has
+               a page for the kind. #}
+            {% if subject.kind == 'customer' %}
+              {{ m.customer_cell(names, subject.id, href=subject.url) }}
+            {% elif subject.url %}<a href="{{ subject.url }}"><code>{{ subject.id }}</code></a>
+            {% else %}<code>{{ subject.id }}</code>{% endif %}
+          </div>
+        {% else %}
+          <span class="muted">—</span>
+        {% endfor %}
+      </td>
+      <td>{{ m.statuspill('rfis', row.rfi.status) }}</td>
+      <td>
+        {{ row.rfi.dueAt|ts }}
+        {% if row.overdue %}<div><span class="pill warn">Overdue</span></div>{% endif %}
+      </td>
+      <td>{{ row.rfi.publishedAt|ts }}</td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts — the house
+       rule the other four lists follow (recipients/list.html is the model). #}
+    <tr><td colspan="5" class="muted">
+      {% if problem %}The list could not be read — see above.
+      {% else %}Nothing is being asked of you on this page.
+        {% if not settled %}Switch to "Include resolved and cancelled" to see the ones already dealt with.
+        {% else %}<a href="/applications">See the applications these come from</a>.{% endif %}
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# Server-built, filters and page size carried across the page turn
+   (app/web/__init__.py::pager). #}
+{{ m.table_foot(pager) }}
+{% endblock %}

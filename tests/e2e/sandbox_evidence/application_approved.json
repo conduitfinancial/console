@@ -1,0 +1,19 @@
+{
+  "clientReferenceId": "zzztest-sweep-1c66c5ce43",
+  "createdAt": "2026-08-31T03:26:27.625Z",
+  "id": "app_034GTiKI4W4NrQXak1tUpN",
+  "persons": [
+    {
+      "name": "ZZZTEST Console E2E firstName ZZZTEST Console E2E lastName",
+      "referenceId": "app_034GTiKI4W4NrQXak1tUpN:9C8"
+    },
+    {
+      "name": "ZZZTEST Console E2E firstName ZZZTEST Console E2E lastName",
+      "referenceId": "app_034GTiKI4W4NrQXak1tUpN:Fxr"
+    }
+  ],
+  "status": "approved",
+  "submittedAt": "2026-08-31T03:26:27.625Z",
+  "type": "customer_onboarding",
+  "updatedAt": "2026-08-31T03:26:28.382Z"
+}

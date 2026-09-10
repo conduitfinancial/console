@@ -1,0 +1,14 @@
+{
+  "correlationId": "479fbe05-a98f-4f98-acf0-983ccaa3b459",
+  "detail": "Invalid order combo: fiat same-asset moves are not orderable; use /payouts",
+  "details": {
+    "reason": "fiat same-asset moves are not orderable; use /payouts"
+  },
+  "docs": "https://conduit-v2.mintlify.app/errors#invalid-order-combo",
+  "instance": "/v2/orders",
+  "resolution": "Adjust the source/destination pair to a supported combination, or align autoPayout with the order direction: fiat autoPayout for OFFRAMP, crypto autoPayout for ONRAMP. For ONRAMP, `recipient.chain` must match the destination wallet's chain.",
+  "status": 422,
+  "timestamp": "2026-08-28T20:19:23.295Z",
+  "title": "Invalid Order Combination",
+  "type": "INVALID_ORDER_COMBO"
+}

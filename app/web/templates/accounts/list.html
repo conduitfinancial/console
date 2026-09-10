@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Accounts · Conduit Console{% endblock %}
+{% block body %}
+{# **No action pill, deliberately**.
+   An account is requested for one customer, from that customer's own page, so
+   the only pill this page could carry is a link to the Directory — which is two
+   entries up in the ribbon. A pill that duplicates navigation is noise wearing
+   the primary fill. #}
+{{ m.page_head('customers', 'Virtual accounts') }}
+{# What this page is and, just as importantly, what it is not. Conduit has no
+   global virtual-accounts endpoint — the only list it offers is nested under one
+   customer — so these rows are this installation's own projections, which is
+   also why the page renders when Conduit does not. And there are no balances
+   here: a balance is a live read per account, and this page would make one per
+   row.
+
+   **Demoted to a disclosure** (spec §4.5/addendum): the
+   record-provenance sentence and the no-balances rationale are both true on
+   every visit and neither is what this page is — the first sentence already
+   says that. Moved verbatim, not rewritten. #}
+{% if live %}
+<p class="muted lede">
+  This customer's virtual accounts, read live from Conduit just now — the same call and the same
+  balances their own page shows.
+</p>
+{% else %}
+<p class="muted lede">
+  Every virtual account this console has observed, across every customer, most recently observed
+  first. Pick a customer above for their accounts read live, with balances.
+</p>
+<details class="teaching">
+  <summary>Where these rows come from</summary>
+  <p class="muted">
+    Conduit has no endpoint that lists every account across every customer — only one nested under
+    a single customer — so this unfiltered view is built from this installation's own records
+    instead, and renders even when Conduit is not; the customer names beside them are one bounded
+    read that simply goes quiet when Conduit does. Pick a customer above to read their accounts
+    live, balances included.
+  </p>
+</details>
+{% endif %}
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/accounts" class="bar row"
+      hx-get="/accounts" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  {# The rows-per-page control lives in the table footer, but it has to survive a
+     filter submit as well as a page turn — otherwise filtering silently reverts
+     to 25 (the ledger's own rule). #}
+  <input type="hidden" name="limit" value="{{ pager.size }}">
+  <label>Customer
+    {# The datalist is back, and this time it is not a second read. The objection was to
+       spending a call this page did not otherwise make for a convenience; the names
+       column needs that call anyway, and one read now serves both. The wire value is
+       still the id the filter sends — a name only becomes one in the browser, because
+       `customerId` is the only thing this list can be narrowed by. #}
+    <input type="text" name="customerId" value="{{ customer_id }}" list="known-customers"
+           placeholder="name or cus_…">
+  </label>
+  {{ m.customer_datalist(customers) }}
+  <label>Asset
+    <select name="asset">
+      <option value="">any</option>
+      {% for code in assets %}
+        <option value="{{ code }}" {{ 'selected' if code == asset }}>{{ code }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      {% for value in statuses %}
+        <option value="{{ value }}" {{ 'selected' if value == status }}>{{ value.replace('_', ' ') }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/accounts">Reset</a>
+</form>
+
+{% if customers_more %}
+  {# The suggestions are the first cursor page, not the customer list — the same
+     sentence the other six pickers carry, for the same reason: a completion
+     list that quietly stops at 25 would let an operator conclude a customer
+     does not exist. It bounds the NAMES column too: an id past that page shows
+     as itself. #}
+  <p class="muted">Customer names and suggestions come from the first 25 customers —
+    <a href="/customers">find the rest in Customers</a>.</p>
+{% endif %}
+
+{% if live %}
+  {% if live_problem %}{{ m.problem(live_problem) }}{% endif %}
+  {# The export still reads this installation's projections, so it is named as
+     that here: the table above is Conduit's live answer, and a file that
+     silently disagreed with the screen it was downloaded from would be worse
+     than no button. #}
+  {{ m.result_meta(request, rows|length, 'account',
+                   export=export_url(request, 'accounts'),
+                   export_label='Export observed records (CSV)') }}
+  {% call m.virtual_accounts_table(rows, customer_id, balance_rows) %}
+    {% if live_filtered_to_empty %}
+      No account matches these filters — widen them.{% if status %} A status filter is applied
+      to this page alone, so there may be a match on another.{% endif %}
+    {% else %}
+      No virtual accounts for this customer yet.
+      {% if can_request_account %}<a href="/customers/{{ customer_id }}/request-account">Request one</a>.{% endif %}
+    {% endif %}
+  {% endcall %}
+  <p class="row">
+    {# The filters ride along with the cursor turn — otherwise Next/Previous
+       would silently drop back to this customer's unfiltered accounts. #}
+    {% set base = "/accounts?customerId=" ~ customer_id %}
+    {% if asset %}{% set base = base ~ "&asset=" ~ asset %}{% endif %}
+    {% if status %}{% set base = base ~ "&status=" ~ status %}{% endif %}
+    {% set base = base ~ "&accounts_cursor=" %}
+    {% if live_page and live_page.prev_cursor %}
+      <a class="btn" href="{{ base }}{{ live_page.prev_cursor }}&amp;accounts_direction=backward">Previous</a>
+    {% endif %}
+    {% if live_page and live_page.next_cursor %}
+      <a class="btn" href="{{ base }}{{ live_page.next_cursor }}">Next</a>
+    {% endif %}
+    {% if can_request_account %}
+      <a class="btn" href="/customers/{{ customer_id }}/request-account">Request another account</a>
+    {% endif %}
+  </p>
+{% else %}
+{# The rows are a local query, so nothing here can fail without taking the whole
+   page with it, and the customers read's failure is deliberately silent
+   (`with_customer_names`) — a banner about an outage this list survived would
+   be the console reporting the wrong thing.
+
+   `live_problem` is the one exception, and it is not this list failing: a
+   customer was selected, Conduit could not answer for them, and these observed
+   rows are standing in for the live ones. The banner says which. #}
+{% if live_problem %}{{ m.problem(live_problem) }}{% endif %}
+{{ m.result_meta(request, rows|length, 'account', per_page=pager.size,
+                 export=export_url(request, 'accounts')) }}
+
+<div class="table-scroll">
+<table>
+  <tr><th>Account</th><th>Customer</th><th>Asset</th><th>Status</th><th>Observed</th></tr>
+  {% for row in rows %}
+    <tr>
+      <td>
+        {% if row.url %}
+          <a href="{{ row.url }}"><code>{{ row.id }}</code></a>
+        {% else %}
+          <code>{{ row.id }}</code>
+          <div class="muted">no customer on this record — open it from the customer's page</div>
+        {% endif %}
+      </td>
+      {# Reported, in the requester's words: "a human operator does not
+         understand IDs. They are useful, but they need names." Name over id,
+         id kept underneath because it is still the copyable identity — and the
+         bare id alone when the bounded read named nobody. #}
+      <td>{{ m.customer_cell(names, row.customer_id, href='/customers/' ~ row.customer_id) }}</td>
+      <td>{{ row.asset or '—' }}</td>
+      <td>{{ m.statuspill('virtual_accounts', row.state) }}</td>
+      <td>{{ row.observed|ts }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">
+      {% if filtered %}
+        No observed account matches these filters. Widen them, or
+        <a href="/accounts">clear them</a>.
+      {% else %}
+        {# An empty state is a sentence plus the action that fills it — and here
+           the honest sentence has to say what fills the table, which is an
+           observation rather than an account existing. `virtual_account.activated`
+           is the only virtual-account event Conduit publishes (verified against
+           `GET /v2/webhooks/event-types`, 2026-08-29), so an account nobody has
+           told this console about is simply not here yet. #}
+        No account has been observed yet. A row appears when Conduit tells this console about an
+        account — a customer's own page reads their accounts live from Conduit in the meantime, so
+        <a href="/customers">start there</a>.
+      {% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{# The stated cap became a real pager. Saying
+   "more than 100 match, narrow the filters" was honest, but it left row 101
+   reachable only by guessing a filter that would surface it. Server-built, with
+   the three filters and the page size carried across the turn. #}
+{{ m.table_foot(pager) }}
+{% endif %}
+{% endblock %}

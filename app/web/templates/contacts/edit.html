@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ 'New contact' if clone else 'Edit contact' }} · Conduit Console{% endblock %}
+{% block body %}
+{# The clone's head names the PLACE, not the verb pressed to get here (the
+   heading rule) — and the place is a new contact, not the source. "Clone X" read
+   as an imperative on X two lines above a lede promising X is untouched, and the
+   mono id under it was the SOURCE's, which labels this page with the record it
+   does not write. The source is named in the lede instead, where it is context. #}
+{% call m.page_head('contact', 'New contact' if clone else 'Edit ' ~ contact.label,
+                    mono='' if clone else contact.id) %}
+  <a class="btn" href="/customers/{{ customer_id }}/contacts">Back to contacts</a>
+{% endcall %}
+
+{% if clone %}
+  {# Clone mode: the same page, the same permission, the same
+     validation — a new row at the end of it. The source is not touched by
+     anything on this screen, which is the first thing the copy has to say,
+     because the operator arrived here from a page called "Edit". #}
+  <p class="muted lede">
+    A <strong>new contact</strong> for
+    <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>, starting from
+    “{{ contact.label }}” — same payee, a different way to reach them.
+    <strong>“{{ contact.label }}” is not changed by anything on this page.</strong> Nothing here
+    reaches Conduit either: <em>saved here, not yet used — the first payout to it is what proves
+    the coordinates.</em>
+  </p>
+{% else %}
+<p class="muted lede">
+  What this console remembers about one destination for
+  <a href="/customers/{{ customer_id }}"><code>{{ customer_id }}</code></a>, in
+  <strong>Conduit's own fields</strong>. The boxes below are
+  <code>GET /v2/payouts/requirements</code>'s answer for this contact's route — a
+  <code>{{ route.rail }}</code> payout to a {{ contact.recipient_type }} in
+  <code>{{ contact.destination_country }}</code>, asked under
+  <em>{{ purpose_label }}</em> — so what can be saved here is what could be sent. Editing
+  changes only this record: the payments already sent to it are history, and what they went
+  to is on their own trail, not here.
+</p>
+{% endif %}
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# The standing warning, before anything is typed. The confirm step below states
+   it again over the actual diff — this one exists so the operator knows the cost
+   of touching an account number *while they are deciding whether to*. #}
+{% if twin and not clone %}
+  <div class="problem warn" role="status">
+    <strong>This contact is registered for intercompany payouts</strong>
+    <p>
+      Conduit has <code>{{ twin.id }}</code> registered at these coordinates. Changing the
+      account number, IBAN, BIC, routing number or legal name below breaks the match:
+      {{ consequence }}
+      Everything else — the addresses, the bank name, the phone — can be corrected without
+      touching it.
+    </p>
+  </div>
+{% elif not listed and not clone %}
+  {# Three states, not two (the badge rule): a whitelist that could not be read is
+     not a whitelist that holds nothing. #}
+  <div class="problem warn" role="status">
+    <strong>Whitelist status unknown</strong>
+    <p>{{ unknown_whitelist }}</p>
+  </div>
+{% endif %}
+
+{% if confirm.kind == 'delete' %}
+  {# Step two of the delete. Rendered instead of nothing else changing: the
+     operator pressed a button whose consequence is irreversible, so the page
+     stops and says exactly what the click does. #}
+  <div class="problem" role="alert">
+    <strong>Delete “{{ contact.label }}”?</strong>
+    <p>
+      This <strong>destroys the stored coordinates</strong> — the encrypted payload is
+      overwritten and no key, backup or later read brings it back. The contact is archived at
+      the same time, so it leaves every payout picker.
+    </p>
+    <p>
+      What stays, deliberately: the record itself — its name, who saved it, its whole
+      trail — so the payouts that named it still resolve to
+      <strong>{{ contact.label }}</strong> and the ledger's <em>sent to contact</em> filter
+      keeps answering. History is never falsified here; only the coordinates go.
+    </p>
+    <p>
+      Conduit is not told anything. If this destination is also whitelisted, that registration
+      is Conduit's and is untouched — revoke it there.
+    </p>
+    <form hx-post="/customers/{{ customer_id }}/contacts/{{ contact.id }}/delete"
+          hx-target="main" hx-select="main" hx-swap="outerHTML"
+          hx-sync="this:drop" hx-disabled-elt="find button">
+      {% set token = new_intent() %}
+      <input type="hidden" name="intent" value="{{ token }}">
+      <input type="hidden" name="confirm" value="{{ token }}">
+      <button type="submit" class="danger">Delete permanently</button>{{ m.working() }}
+      <a class="btn" href="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit">Keep it</a>
+    </form>
+  </div>
+{% endif %}
+
+{% if clone %}
+  {# **A tray above the form, not a field inside it** (2026-09-02).
+     Two reasons, and the first is fatal: this is its own GET `<form>`, and it
+     shipped nested inside `#contact-edit`, where the HTML parser drops the inner
+     start tag — `#clone-rail` did not exist in the DOM, its `hx-trigger` never
+     fired, its `rail` select became a field of the clone POST, and the button
+     labelled "Reshape the form" submitted the contact. The second is the design
+     one that makes the fix the right shape rather than merely a working one: the
+     rail does not describe this contact, it RESHAPES the form that does — the
+     boxes below are discovery's answer for it, so a `sepa` clone of a `us`
+     contact asks for an IBAN and a BIC and not a routing number. That is a route
+     row, and this console draws a route row as a tray above the form it governs
+     (`#route-row`, `#fork-route`, `#convert-route`). The `<h3>Rail</h3>` over a
+     label reading "Send over" goes with it: a tray field is one micro-label.
+
+     Every rail is offered, the other families' included — the ask was for
+     "same contact, but change the rail and account details", and a payee
+     reachable both ways is exactly that case. Six options stay one flat list:
+     three optgroups over 4/1/1 would be decoration, and the sentence below is
+     what actually states the family rule. #}
+  <div class="bar">
+    <form id="clone-rail" method="get"
+          action="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit"
+          hx-get="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit"
+          hx-trigger="change from:#clone-rail-select" hx-target="main" hx-select="main"
+          hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace" class="row">
+      <input type="hidden" name="clone" value="1">
+      <label for="clone-rail-select">Send over
+        <select id="clone-rail-select" name="rail">
+          {% for one in rails %}
+            <option value="{{ one }}" {{ 'selected' if one == route.rail }}>{{ one }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Reshape the form</button>{{ m.working() }}
+    </form>
+    <p class="help">
+      “{{ contact.label }}” is saved for the <code>{{ contact.rail_family }}</code> family; this
+      clone is saved for whichever family the rail above belongs to. Changing it reloads this
+      page with the fields that rail requires — what you have typed into the boxes below is not
+      carried across, because they may not be the same boxes.
+    </p>
+  </div>
+{% endif %}
+
+{% if rm %}
+  <form id="contact-edit" hx-post="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit"
+        hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-sync="this:drop" hx-disabled-elt="find button[type=submit]">
+    {# One-use nonce per render, the house pattern. Nothing about this write is an
+       operations-ledger row (there is no Conduit call to duplicate), so this is
+       not the §1 guard — it is what the confirm step below echoes, so a body from
+       the screen that did *not* state the consequence cannot carry one. #}
+    {% set token = new_intent() %}
+    <input type="hidden" name="intent" value="{{ token }}">
+    {# What makes this POST a clone. A hidden field rather than a second submit
+       button's value: one form, one submitting control, and no dependence on
+       which button the browser thinks it used. #}
+    {% if clone %}<input type="hidden" name="clone" value="1">{% endif %}
+
+    {% if rm.form_errors %}
+      <div class="problem" role="alert">
+        <strong>{{ 'This clone was not saved' if clone else 'This contact was not saved' }}</strong>
+        <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    <section>
+      <h3>Name</h3>
+      <div class="field">
+        <label for="contact-label">What this console calls it *</label>
+        <input type="text" id="contact-label" name="label" value="{{ label }}"
+               maxlength="128" autocomplete="off" required>
+        <div class="help">
+          Yours, not Conduit's — it is how this destination is picked on a payout form. One
+          live name per customer.{% if clone %} A <strong>new</strong> one: reusing
+          “{{ contact.label }}” would be saving over it, so it is refused.{% endif %}
+        </div>
+      </div>
+    </section>
+
+    {% for group in rm.groups %}
+      <section>
+        <h3>{{ group.title }}</h3>
+        {% for rf in group.fields %}{{ m.field(rf) }}{% endfor %}
+      </section>
+    {% endfor %}
+
+    {% if kept %}
+      {# What the form does not own. Names only — the point is that the record is
+         wider than this route describes, not what it holds. For a CLONE the same
+         list means the opposite thing: those keys are not copied, because a new
+         record may only hold what its own route could send. #}
+      <p class="muted">
+        {% if clone %}
+          {{ kept|length }} stored field{{ 's' if kept|length != 1 }} of
+          “{{ contact.label }}” {{ 'are' if kept|length != 1 else 'is' }} not described by this
+          route and {{ 'are' if kept|length != 1 else 'is' }} <strong>not copied</strong> into
+          the clone:
+        {% else %}
+          {{ kept|length }} stored field{{ 's' if kept|length != 1 }} this route does not
+          describe {{ 'are' if kept|length != 1 else 'is' }} kept exactly as
+          {{ 'they are' if kept|length != 1 else 'it is' }}:
+        {% endif %}
+        {% for key in kept %}<code>{{ key }}</code>{{ ', ' if not loop.last }}{% endfor %}.
+      </p>
+    {% endif %}
+
+    {% if confirm.kind == 'save' %}
+      {# Step two of the save: the consequence over the ACTUAL diff, masked the way
+         every other surface masks (`counterparties.diff`). The values in the boxes
+         above are what this button stores. #}
+      <div class="problem warn" role="alert">
+        <strong>This edit drops “Registered for intercompany payouts”</strong>
+        <ul>
+          {% for key, change in confirm.changed.items() %}
+            <li><code>{{ key }}</code> <span class="num">{{ change }}</span></li>
+          {% endfor %}
+        </ul>
+        <p>{{ consequence if twin else unknown_whitelist }}</p>
+        <p class="muted">
+          The registration itself is not touched: Conduit still holds it, still pointing at the
+          old coordinates. Nothing about the payments already sent changes either.
+        </p>
+        <input type="hidden" name="confirm" value="{{ token }}">
+        <button type="submit" class="danger">Save anyway — drop the whitelist link</button>
+        {{ m.working() }}
+        <a class="btn" href="/customers/{{ customer_id }}/contacts">Cancel</a>
+      </div>
+    {% else %}
+      <div class="row">
+        <button type="submit" class="primary">{{ 'Save as a new contact' if clone else 'Save contact' }}</button>{{ m.working() }}
+        {% if clone %}
+          <a class="btn" href="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit">Back to editing “{{ contact.label }}”</a>
+        {% else %}
+          {# The way in. A LINK, not a second submit: cloning starts from the
+             source's stored record, not from whatever is in these boxes, and a
+             button that quietly meant "and take my unsaved edits with you" would
+             be two writes wearing one control. #}
+          <a class="btn" href="/customers/{{ customer_id }}/contacts/{{ contact.id }}/edit?clone=1">Save as a new contact</a>
+        {% endif %}
+        <a class="btn" href="/customers/{{ customer_id }}/contacts">Cancel</a>
+      </div>
+      <p class="muted">
+        {% if clone %}
+          Stored encrypted for this customer as a <strong>new</strong> contact and offered on
+          the next {{ route.rail }} payout to
+          <code>{{ contact.destination_country }}</code>. “{{ contact.label }}” keeps
+          everything it has, including its whitelist registration if it has one — a
+          registration belongs to the coordinates Conduit reviewed, and these are new ones.
+        {% else %}
+          Stored encrypted for this customer and offered on the next {{ route.rail }} payout to
+          <code>{{ contact.destination_country }}</code>. Conduit is never told this record
+          exists.{% if twin %} Changing an identity field asks you to confirm first.{% endif %}
+        {% endif %}
+      </p>
+    {% endif %}
+  </form>
+{% endif %}
+
+{% if can_delete and not clone %}
+  <section>
+    <h2>Delete this contact</h2>
+    <p class="muted">
+      Archiving retires a contact and keeps its coordinates; deleting destroys them. The record,
+      its name and its trail stay either way — so the payouts that named this contact keep
+      resolving. Admin only, and there is no way back.
+    </p>
+    <form hx-post="/customers/{{ customer_id }}/contacts/{{ contact.id }}/delete"
+          hx-target="main" hx-select="main" hx-swap="outerHTML"
+          hx-sync="this:drop" hx-disabled-elt="find button">
+      <input type="hidden" name="intent" value="{{ new_intent() }}">
+      <button type="submit" class="danger">Delete contact</button>{{ m.working() }}
+    </form>
+  </section>
+{% endif %}
+{% endblock %}

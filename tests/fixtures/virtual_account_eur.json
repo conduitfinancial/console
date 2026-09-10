@@ -1,0 +1,32 @@
+{
+  "id": "vac_5tRnQ2wY8pL3kD6mB1xC4v",
+  "status": "pending_activation",
+  "asset": { "code": "EUR" },
+  "balances": [
+    {
+      "available": { "code": "EUR", "amount": "0.00" },
+      "pending": { "code": "EUR", "amount": "0.00" },
+      "frozen": { "code": "EUR", "amount": "0.00" }
+    }
+  ],
+  "depositInstructions": [
+    {
+      "type": "sepa",
+      "currency": "EUR",
+      "iban": "DE89370400440532013000",
+      "bic": "COBADEFFXXX",
+      "beneficiaryName": "ZZZTEST Console E2E EOOD",
+      "beneficiaryAddress": "1 Test Street, Sofia, 1000, BG",
+      "paymentReference": "VAC5TRNQ2WY8PL3KD6MB1XC4V",
+      "bank": {
+        "legalName": "Commerzbank AG",
+        "address": "Kaiserplatz, 60311 Frankfurt am Main, DE",
+        "bic": "COBADEFFXXX"
+      },
+      "rails": [{ "rail": "sepa" }]
+    }
+  ],
+  "activatedAt": null,
+  "createdAt": "2026-08-26T08:00:00.000Z",
+  "updatedAt": "2026-08-26T08:00:00.000Z"
+}

@@ -1,0 +1,53 @@
+{
+  "autoExecute": false,
+  "clientReferenceId": "2d21e8c2-3479-4167-a5fc-d457492c9681",
+  "createdAt": "2026-08-31T03:26:51.653Z",
+  "customerId": "cus_034GTiOfAFAhfDVahyir2N",
+  "destination": {
+    "id": "vac_034GTitTa3C8OcqAZby2V3",
+    "type": "virtual_account"
+  },
+  "destinationAsset": {
+    "amount": "16.35",
+    "code": "EUR"
+  },
+  "executedAt": "2026-08-31T03:27:05.254Z",
+  "executionTrigger": "client",
+  "fees": [
+    {
+      "assetAmount": {
+        "amount": "1.00",
+        "code": "USD"
+      },
+      "owner": "conduit",
+      "type": "fixed"
+    }
+  ],
+  "fundedBy": [],
+  "id": "ord_034GTiw5CFm3P6efRj3qnU",
+  "linkedTransactionIds": [
+    "txn_034GTix5scZuDgEOefWqck"
+  ],
+  "lockExpiresAt": "2026-08-31T05:26:51.629Z",
+  "lockSide": "source",
+  "quoteOptionId": "qop_034GTivJj5Z1kB4vaHsG0w",
+  "rate": {
+    "endUserRate": "0.8606334607",
+    "referenceRate": "0.862790436831",
+    "totalSpreadBps": "25"
+  },
+  "source": {
+    "id": "vac_034GTiS4gzawZXXhZkOhLv",
+    "type": "virtual_account"
+  },
+  "sourceAsset": {
+    "amount": "19.00",
+    "code": "USD"
+  },
+  "status": "succeeded",
+  "totalDebit": {
+    "amount": "20.00",
+    "code": "USD"
+  },
+  "type": "fiat_conversion"
+}

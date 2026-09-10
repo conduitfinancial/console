@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Orders · Conduit Console{% endblock %}
+{% block body %}
+{# Retitled: the page is the orders
+   ledger, and the launcher above it is one section of it rather than the thing
+   the page is called after. The ribbon still lights "Transact" for the three
+   money flows — that split is `base.html`'s, by path, and is untouched. #}
+{{ m.page_head('transactions', 'Orders') }}
+
+{% if can_act %}
+  <h2>Move money</h2>
+  <p class="muted">
+    Where money movement starts. A conversion becomes an order, listed below; a payout or a
+    transfer lands in the <a href="/transactions">transactions ledger</a>.
+  </p>
+  {# Path parameters cannot come out of a GET form, so the three verbs are
+     buttons and one line of app.js turns the picked customer into the URL.
+     No customers to pick (empty page, or Conduit unreachable) → the whole
+     launcher is inert, and the orders list below still renders. #}
+  <div class="bar row" id="move-money">
+    <label>Customer
+      <select id="launch-customer" {{ 'disabled' if not customers }}>
+        {% for item in customers %}
+          <option value="{{ item.id }}">{{ display_name(item) or item.id }} · {{ item.id }}</option>
+        {% else %}
+          <option>No customer to move money for</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" data-launch="/payouts" {{ 'disabled' if not customers }}>Send a payout</button>
+    <button type="button" data-launch="/transfers/new" {{ 'disabled' if not customers }}>Transfer</button>
+    <button type="button" data-launch="/convert" {{ 'disabled' if not customers }}>Convert</button>
+  </div>
+  {% if customers_problem %}{{ m.problem(customers_problem) }}{% endif %}
+  {% if customers_more %}
+    <p class="muted">The first 25 customers — <a href="/customers">find the rest in Customers</a>.</p>
+  {% endif %}
+{% endif %}
+
+<h2>Conversion orders</h2>
+<p class="muted">
+  As Conduit's own <code>GET /v2/orders</code> lists them. The money that actually moved is in the
+  <a href="/transactions?type=fiat_conversion">fiat conversion</a> ledger — each order links to
+  its own transactions.
+</p>
+
+{% if problem %}{{ m.problem(problem) }}{% endif %}
+
+{# **Filters apply on `change`** — one filter grammar for every list in this
+   console (2026-09-02: "auto-filter once I select the
+   customer"). The house route-row triple (`main` / `hx-select` /
+   `outerHTML`) plus `hx-push-url`, so the filtered URL stays linkable and the
+   pager, the CSV link and a bookmark all still name what is on screen;
+   `hx-sync="this:replace"` so a fast second pick wins over a slow first one.
+   The Filter button keeps its job as the no-JS submit: `hx-trigger` replaces the
+   form's default `submit` trigger, so with JavaScript off the button is an
+   ordinary GET to the same URL and lands on the same page. #}
+<form method="get" action="/orders" class="bar row"
+      hx-get="/orders" hx-trigger="change" hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
+  <input type="hidden" name="limit" value="{{ limit }}">
+  {# Spaced pills, not the connected `.segmented` control: this filter takes as
+     many answers as the operator ticks, and joined segments say "pick one"
+     (DESIGN.md Decisions Log). The vocabulary is still the route's own
+     `conversions.ORDER_STATUSES`, and each pill is a real checkbox named
+     `status` — so the wire stays the repeated `?status=a&status=b` the route
+     has always parsed. #}
+  <label id="orders-status">Status</label>
+  <div class="pill-group" role="group" aria-labelledby="orders-status">
+    {% for value in statuses %}
+      <label><input type="checkbox" name="status" value="{{ value }}" {{ 'checked' if value in selected_statuses }}> {{ value }}</label>
+    {% endfor %}
+  </div>
+  <label>Client reference
+    <input type="text" name="clientReferenceId"
+           value="{{ request.query_params.get('clientReferenceId') or '' }}">
+  </label>
+  <button type="submit">Filter</button>
+  <a class="btn reset" href="/orders">Reset</a>
+</form>
+
+{{ m.result_meta(request, page.items|length, 'order', problem=problem, per_page=limit,
+                 export=export_url(request, 'orders')) }}
+
+<div class="table-scroll">
+<table>
+  {# One Amount column, not Pair + Out + In: each leg already names its own
+     asset, so three columns were printing "USD" and "EUR" twice each and
+     splitting the one number an operator reads as a pair. Same
+     `<out> → <in>` form the order detail and the conversion transaction rows
+     use. An order missing an amount falls back to its asset code, so the pair
+     the old column carried never disappears. #}
+  <tr>
+    <th>Order</th><th>Customer</th><th>Type</th><th>Status</th>
+    <th class="num">Amount</th><th>Created</th>
+  </tr>
+  {% for item in page.items %}
+    {% set row = view(item) %}
+    <tr {{ 'class="exception"'|safe if is_exception('orders', item.status) }}>
+      <td><a href="/orders/{{ item.id }}"><code>{{ item.id }}</code></a></td>
+      {# An order carries `customerId` and no name, so this is the resolver's map
+         or the bare id — the same one bounded read that fills the launcher. #}
+      <td>{{ m.customer_cell(names, item.customerId,
+             href='/customers/' ~ (item.customerId or '')) }}</td>
+      <td>{{ row.type or '—' }}</td>
+      <td>{{ m.statuspill('orders', item.status) }}</td>
+      <td class="num">{{ row.source_amount or row.source_asset or '—' }} →
+        {{ row.destination_amount or row.destination_asset or '—' }}</td>
+      <td>{{ item.createdAt|ts }}</td>
+    </tr>
+  {% else %}
+    {# "could not be read" and "there are none" are different facts; the count
+       above already refuses to merge them, and so must the row that replaces
+       the rows (recipients/list.html is the house model). #}
+    <tr><td colspan="6" class="muted">
+      {% if problem %}The list could not be read — see above.
+      {% else %}No orders on this page. An order is created by confirming a conversion — start one
+      from a customer's <a href="/customers">Convert</a> screen, or widen the filters above.{% endif %}
+    </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{{ m.table_foot(pager) }}
+{% endblock %}

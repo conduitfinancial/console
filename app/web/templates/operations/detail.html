@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Operation · Conduit Console{% endblock %}
+{% block body %}
+{# The page's one header action stays exactly what it was — the macro's caller
+   slot is the header-action slot. #}
+{# No `mono`: the panel below already carries this operation's id, as its own
+   self-link, and one screen does not need it twice. #}
+{% call m.page_head('operation', 'Operation') %}
+  {% if operation.op.conduit_resource_id and operation.op.conduit_resource_id.startswith('app_') %}
+    <a class="btn" href="/applications/{{ operation.op.conduit_resource_id }}">Open the application</a>
+  {% endif %}
+{% endcall %}
+<div {% if operation.refresh %}hx-get="/operations/{{ operation.op.id }}" hx-trigger="every 15s"
+     hx-select="#op-panel" hx-target="#op-panel" hx-swap="outerHTML"{% endif %}>
+  <div id="op-panel">{% include "operations/_panel.html" %}</div>
+</div>
+{% endblock %}

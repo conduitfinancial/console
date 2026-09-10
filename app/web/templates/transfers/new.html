@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Transfer · Conduit Console{% endblock %}
+{% block body %}
+{{ m.page_head('transact', 'Transfer') }}
+<p class="muted lede">
+  {# Name first, id demoted — the console's names-over-ids rule (DESIGN.md). A
+     name that did not resolve renders the id alone rather than a placeholder.
+     With no customer picked (the ribbon lands here) the lede names
+     nobody rather than linking at `/customers/`. #}
+  {% if customer_id %}Customer <a href="/customers/{{ customer_id }}">{{ customer_name or customer_id }}</a>{% if customer_name %}
+  <code>{{ customer_id }}</code>{% endif %}. {% endif %}A transfer moves money from one Conduit account
+  straight into another — you name the destination <em>account</em> and Conduit routes it. Any
+  customer of this organisation, same currency on both sides. Moving between two currencies is a
+  {# The breadcrumbs stay customer-scoped where a customer is known — those URLs
+     are unchanged and land with the customer already filled in — and degrade to
+     the bare form where one is not. #}
+  <a href="{{ '/customers/' ~ customer_id ~ '/convert' if customer_id else '/convert' }}">conversion</a>, not a transfer; paying a
+  <em>bank</em> account outside Conduit is a
+  <a href="{{ ('/customers/' ~ customer_id ~ '/payouts/new' if customer_id else '/payouts/new') ~ '?purpose=intercompany' }}">payout</a>, and that one
+  still needs a whitelisted destination{% if customer_id %} — this customer's are on their
+  <a href="/customers/{{ customer_id }}/contacts">contacts page</a>{% endif %}.
+</p>
+
+{% for p in problems %}{{ m.problem(p) }}{% endfor %}
+
+{# THE ROUTE FORM. Everything the *server* has to re-read lives here, and
+   changing any of the three controls the trigger names re-renders the whole
+   page rather than leaving a render-time copy behind — the source account
+   decides the balances panel, the currency label and which destination accounts
+   are payable, and a copy of any of those goes stale the moment the select
+   moves. (It did: a USD selection showed the EUR account's balances under an
+   “Amount (EUR)” label.) The destination *account* select is deliberately NOT a
+   trigger: nothing the server reads depends on it, so moving it costs no round
+   trip. Because the trigger is `change` and not `submit`, the button below still
+   works as a plain GET with JavaScript off. #}
+{# The action is the GLOBAL route on both entry points: the customer
+   is a control in this form now, so it travels as `customer_id` rather than as
+   a prefix of the URL — one action, one shape, and changing the customer is the
+   same round trip as changing the account. The customer-scoped URL still serves
+   this exact page; it simply stops being where the form points back to. #}
+<form id="transfer-route" method="get" action="/transfers/new"
+      hx-get="/transfers/new"
+      hx-trigger="change from:#customer_id, change from:#virtualAccountId, change from:#destination"
+      hx-target="main" hx-select="main"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace"
+      hx-indicator="#transfer-working">
+  <div class="card">
+    <h2><span class="step-n">1</span> Out of</h2>
+    <div class="field">
+      {# The FIRST field of step 1, because the step owns the source: whose money
+         is moving, then which of their accounts it leaves. Names-first, the
+         house datalist — `GET /v2/customers` has no name or search parameter, so
+         a name can only become an id in the browser. Suggestion, never a
+         constraint. #}
+      <label for="customer_id">Source customer</label>
+      <input type="text" id="customer_id" name="customer_id" value="{{ customer_id }}"
+             placeholder="cus_…" list="known-customers" size="30">
+      <div class="help">
+        {% if not customer_id %}Pick the customer whose money is moving — the accounts below are
+        theirs.{% else %}Whose money is moving. Changing it reloads this page against their
+        accounts.{% endif %}
+        {% if customers_more %}The suggestions are the first {{ customers|length }} customers, not
+        the whole list; an id typed in full is accepted whether or not it is suggested.{% endif %}
+      </div>
+    </div>
+    {{ m.customer_datalist(customers) }}
+    <div class="field">
+      <label for="virtualAccountId">Source account</label>
+      {# Both sides of a transfer name a party: an operator does not recognise
+         `vac_034GTiOfAFAhfDVahyir2N`, and the two halves of one move have to be
+         tellable apart at a glance. #}
+      <select id="virtualAccountId" name="virtualAccountId">
+        {% for item in accounts %}
+          <option value="{{ item.id }}" {{ 'selected' if account and item.id == account.id }}>
+            {{ customer_name or customer_id }} · {{ item.asset.code if item.asset else '' }} · {{ item.id }}
+          </option>
+        {% else %}
+          {# Three facts, not two: nobody picked, "there are none", and "we could
+             not ask". The first one asserts nothing about anybody — no read was
+             made. #}
+          <option value="">{{ 'pick the customer above' if not customer_id
+                              else ('no active virtual account' if accounts_listed
+                                    else 'virtual accounts could not be read') }}</option>
+        {% endfor %}
+      </select>
+      {% if customer_id and not accounts and not accounts_listed %}
+        <div class="err">
+          Either Conduit could not be read, or the accounts have changed status — this console
+          cannot tell which, so it is <em>not</em> saying this customer has none. See the problem
+          above; reload before requesting an account.
+        </div>
+      {% endif %}
+    </div>
+    <div class="table-scroll">
+    <table>
+      <tr><th>Asset</th><th class="num">Available</th><th class="num">Pending</th><th class="num">Frozen</th></tr>
+      {% for row in balances %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td class="num">{{ m.amount(row.available) }}</td>
+          <td class="num">{{ m.amount(row.pending) }}</td>
+          <td class="num">{{ m.amount(row.frozen) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">
+          {% if not customer_id %}
+            {# Nobody is picked, so there is no account to report a balance for —
+               and nothing to say about anyone's money. #}
+            Pick the customer above and their balances appear here.
+          {% else %}
+            No balance reported for this account — there is nothing to transfer out of it yet.
+            {% if account %}<a href="/customers/{{ customer_id }}/accounts/{{ account.id }}">See how to
+            fund it</a>.{% else %}<a href="/customers/{{ customer_id }}/request-account">Request an
+            account</a> first.{% endif %}
+          {% endif %}
+        </td></tr>
+      {% endfor %}
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-n">2</span> Into</h2>
+    <div class="field">
+      <label for="destination">Destination customer</label>
+      {# Names first: `GET /v2/customers` has no name or search parameter, so a
+         name can only become an id in the browser. Suggestion, never a
+         constraint — any customer of this organisation is a legal destination,
+         including one past the bounded read below. #}
+      <input type="text" id="destination" name="destination" value="{{ transfer.destination }}"
+             placeholder="cus_…" list="destination-customers" size="30">
+      <div class="help">
+        {% if destination_filter %}
+          {# Suggestion filtered, constraint unchanged. The word that
+             carries the whole caveat is "observed": this console's own
+             projections are what it has seen, not Conduit's whole book, so an
+             account it never saw a webhook or a read for is absent from the
+             list and its owner is still a legal destination. #}
+          The suggestions are customers this console has <em>observed</em> to hold an active
+          {{ destination_filter }} account — observed, not all: one it has never seen is missing
+          from the list, not from Conduit.
+          {# Both bounds stated, because absence here has two console-side causes:
+             never observed, and past the bounded customers read the suggestions
+             are drawn from. Claiming only the first would leave the second
+             masquerading as a fact about holdings. #}
+          {% if customers_more %}They are also drawn from the first {{ customers|length }}
+          customers, not the whole list.{% endif %}
+          An id typed in full is accepted whether or not it is
+          suggested, and resolved live.
+        {% else %}
+          Any customer of this organisation, this one included — a move between two of its own
+          accounts is a transfer like any other.
+          {% if customers_more %}The suggestions are the first {{ customers|length }} customers, not
+          the whole list; an id typed in full is accepted whether or not it is suggested.{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {{ m.customer_datalist(destination_customers, 'destination-customers') }}
+
+    <div class="field">
+      <label for="destinationVirtualAccountId">Destination account</label>
+      <select id="destinationVirtualAccountId" name="destinationVirtualAccountId">
+        <option value="">—</option>
+        {% for item in destination_accounts %}
+          {# Disabled with the reason, never filtered out: an account that
+             vanished from a picker is an account the operator goes looking for.
+             The server re-decides both refusals against Conduit's own answer. #}
+          <option value="{{ item.id }}" {{ 'disabled' if not item.usable }}
+                  {{ 'selected' if item.id == transfer.destination_account_id and item.usable }}>
+            {{ destination_name or transfer.destination }} · {{ item.asset or '—' }} · {{ item.id }}
+            {%- if item.is_source %} — this is the source account
+            {%- elif not item.usable %} — holds {{ item.asset or 'another currency' }}, not {{ asset }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+
+      {% if not transfer.destination %}
+        <div class="help">Pick the destination customer above and their accounts appear here.</div>
+      {% elif not destination_listed %}
+        {# Three facts, three sentences. This is the read that never answered. #}
+        <div class="err">
+          Conduit's accounts for <code>{{ transfer.destination }}</code> could not be read — see the
+          problem above. This console cannot say whether they hold an account here, so it is
+          <em>not</em> saying they have none. Reload.
+        </div>
+      {% elif not destination_accounts %}
+        <div class="err">
+          {{ destination_name or transfer.destination }} has no <em>active</em> virtual account, so
+          there is nothing to transfer into.
+        </div>
+      {% elif not destination_matching %}
+        {# They hold accounts, just none in this currency. No Convert pointer:
+           these are ANOTHER customer's accounts, and converting this customer's
+           money does not create one over there — a cross-customer,
+           cross-currency move has no console flow, so this states what is true
+           and stops. (Where the destination IS this customer, the branch below
+           is the one that fires, and there the pointer is true.) #}
+        <div class="err">
+          {{ destination_name or transfer.destination }} has no active
+          <strong>{{ asset or 'matching' }}</strong> account. Transfers are same-currency — Conduit
+          refuses the pair with <code>PAYOUT_DESTINATION_CURRENCY_MISMATCH</code>.
+        </div>
+      {% elif not destination_usable %}
+        {# They DO hold this currency — in the very account the money would be
+           leaving. Saying "no {{ asset }} account" here would be false. #}
+        <div class="err">
+          The only active {{ asset }} account here is the one you are transferring
+          <em>out of</em>. A transfer needs two different accounts.
+          {% if own_accounts %}
+            Moving this customer's {{ asset }} into one of their other currencies is a
+            {# `source=` is read by Convert's `_pick` — it lands with the very account
+               the money is stuck in already picked. This branch only renders when
+               `asset` is truthy, which means a source account was picked. #}
+            <a href="/customers/{{ customer_id }}/convert?source={{ account.id }}">conversion</a>, not a
+            transfer.
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="row">
+    <button type="submit">Reload</button>
+    {{ m.working('Reading accounts…', 'transfer-working') }}
+    <span class="muted">Changing either picker reloads this page; the button is the same thing
+    without JavaScript.</span>
+  </p>
+</form>
+
+{% if not can_act %}
+  <p class="muted">Read-only: sending a transfer needs the <code>transfer.create</code> permission.</p>
+{% elif not customer_id %}
+  {# No customer, no POST target: a transfer is created under the customer whose
+     account it leaves, so the rest of the form appears once step 1 names one.
+     Nothing is claimed about anybody in the meantime. #}
+  <p class="muted">Pick the source customer in step 1 and the rest of the transfer appears here.</p>
+{% else %}
+  {% if rm.form_errors %}
+    <div class="problem" role="alert">
+      <strong>This transfer was not sent</strong>
+      <ul>{% for message in rm.form_errors %}<li>{{ message.detail }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  {# `hx-include="#transfer-route"`: which accounts this transfer names is READ
+     OFF the live form above, never copied into hidden inputs here — one source,
+     no sync to get wrong. #}
+  {# `hx-disabled-elt` reaches OUTSIDE this form to the route controls on
+     purpose (`#customer_id` included, because the customer is a trigger of the
+     same route form — the freeze covers every control whose `change` swaps
+     `main`, or it covers nothing): the route form and this one are separate
+     sync queues, so a route change mid-submission could swap `main` — fresh nonce,
+     re-enabled button — while the POST was still in flight, and a second click
+     was a second payout. Disabling the triggers for the duration means no
+     change event, no competing GET, no swap: the page holds still while money
+     is moving, which is also what the operator should see. #}
+  <form id="transfer-form" hx-post="/customers/{{ customer_id }}/transfers/new"
+        hx-include="#transfer-route"
+        hx-target="main" hx-select="main" hx-swap="outerHTML"
+        hx-sync="this:drop"
+        hx-disabled-elt="find button[type=submit], #customer_id, #virtualAccountId, #destination, #destinationVirtualAccountId">
+    {# One-use nonce, minted by this render (OPERATIONS_SPEC §1): a browser that
+       re-sends this exact body after a lost redirect lands back on the same
+       operation instead of paying twice. #}
+    <input type="hidden" name="intent" value="{{ new_intent() }}">
+
+    <div class="card">
+      <h2><span class="step-n">3</span> How much</h2>
+      <div class="field">
+        {# The label follows the selection because the select above re-renders
+           this whole page — it is never a copy that can stop being true. #}
+        <label for="amount">Amount ({{ asset or 'account currency' }})</label>
+        <input type="text" id="amount" name="amount" inputmode="decimal" class="num"
+               value="{{ transfer.amount }}" placeholder="1000.00" required>
+        <div class="help">
+          In the source account's own currency, at its own precision. A decimal string, never
+          rounded here.
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="remittanceReference">Reference (optional)</label>
+        {# `destination.remittance` — the DTO's own caps, stated as `maxlength`
+           and enforced again when the body is built. Carried on both halves of
+           the transfer, so it is what the receiving side sees. #}
+        <input type="text" id="remittanceReference" name="remittanceReference"
+               value="{{ transfer.reference }}" maxlength="{{ remittance_limits.reference }}"
+               size="40">
+        <div class="help">
+          Up to {{ remittance_limits.reference }} characters, shown on both sides of the transfer.
+        </div>
+      </div>
+      <div class="field">
+        <label for="remittanceDescription">Description (optional)</label>
+        <input type="text" id="remittanceDescription" name="remittanceDescription"
+               value="{{ transfer.description }}" maxlength="{{ remittance_limits.description }}"
+               size="60">
+        <div class="help">Up to {{ remittance_limits.description }} characters.</div>
+      </div>
+
+      {{ m.internal_reference(reference) }}
+    </div>
+
+    <div class="card">
+      {# No discovery response exists for this arm — `GET /v2/payouts/requirements`
+         takes `rail` as a required parameter and has no `virtual_account` value —
+         so nothing here claims a list of accepted document types. A document is
+         optional and travels in the same `documents[]` a required one would. #}
+      <details class="attach">
+        <summary>Attach a supporting document (optional)</summary>
+        <p class="help">
+          Nothing is required for a transfer, and this console does not claim which types Conduit
+          would accept: this destination arm is outside the requirements endpoint, so there is no
+          discovery answer to quote. Anything attached rides in the same <code>documents[]</code>
+          a payout's would.
+        </p>
+        {{ m.document_widget(rm, document_purpose, request) }}
+      </details>
+    </div>
+
+    <p class="row">
+      <button type="submit" id="transfer-submit" class="primary">Send transfer</button>
+      {{ m.working('Sending…') }}
+      <span class="muted">Cancellable while it is still pending, from the transaction page.</span>
+    </p>
+  </form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,72 @@
+{
+  "id": "vac_2xKjF9mQb7vN4hL1pR3w8t",
+  "status": "active",
+  "asset": { "code": "USD" },
+  "balances": [
+    {
+      "available": { "code": "USD", "amount": "125000.00" },
+      "pending": { "code": "USD", "amount": "2500.50" },
+      "frozen": { "code": "USD", "amount": "0.00" }
+    }
+  ],
+  "depositInstructions": [
+    {
+      "type": "us_domestic",
+      "currency": "USD",
+      "accountNumber": "9876543210",
+      "beneficiaryName": "ZZZTEST Console E2E EOOD",
+      "beneficiaryAddress": "1 Test Street, Sofia, 1000, BG",
+      "beneficiaryPostalAddress": {
+        "addressLine1": "1 Test Street",
+        "city": "Sofia",
+        "postalCode": "1000",
+        "country": "BG"
+      },
+      "paymentReference": "VAC2XKJF9MQB7VN4HL1PR3W8T",
+      "bank": {
+        "legalName": "Lead Bank",
+        "address": "1801 Main St, Kansas City, MO 64108, US",
+        "postalAddress": {
+          "addressLine1": "1801 Main St",
+          "city": "Kansas City",
+          "state": "MO",
+          "postalCode": "64108",
+          "country": "US"
+        }
+      },
+      "rails": [
+        { "rail": "ach", "routingNumber": "101019644", "sameDayEligible": true },
+        { "rail": "fedwire", "routingNumber": "101019644" },
+        {
+          "rail": "rtp",
+          "routingNumber": "101019644",
+          "networks": ["tch", "fednow"],
+          "fednowCap": "1000000.00"
+        }
+      ]
+    },
+    {
+      "type": "swift",
+      "currency": "USD",
+      "accountNumber": "9876543210",
+      "beneficiaryName": "ZZZTEST Console E2E EOOD",
+      "beneficiaryAddress": "1 Test Street, Sofia, 1000, BG",
+      "bank": {
+        "legalName": "Lead Bank",
+        "address": "1801 Main St, Kansas City, MO 64108, US",
+        "bic": "LEADUS44XXX"
+      },
+      "correspondent": {
+        "name": "Citibank N.A.",
+        "address": "388 Greenwich St, New York, NY 10013, US",
+        "bic": "CITIUS33XXX",
+        "accountNumber": "36123456"
+      },
+      "paymentReference": "VAC2XKJF9MQB7VN4HL1PR3W8T",
+      "rails": [{ "rail": "swift" }]
+    }
+  ],
+  "activatedAt": "2026-08-20T10:15:00.000Z",
+  "createdAt": "2026-08-19T09:30:00.000Z",
+  "updatedAt": "2026-08-20T10:15:00.000Z"
+}
