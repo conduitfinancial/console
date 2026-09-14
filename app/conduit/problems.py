@@ -164,6 +164,14 @@ TITLES: dict[str, tuple[str, str]] = {
         "Conduit says this onboarding is still incomplete",
         "Something required is still missing or is not an accepted value. The fields it named are marked below.",
     ),
+    "SUBJECT_REQUIREMENTS_NOT_AVAILABLE": (
+        "Conduit has no onboarding requirements for this customer's situation",
+        "Nothing was sent. Retrying will not change this — ask support whether this country and product can be onboarded.",
+    ),
+    "INVALID_POLICY_SUBJECT": (
+        "Conduit does not recognise one of the classification choices on this form",
+        "The industry or legal-structure value is not one Conduit accepts. Pick again from the offered options and submit.",
+    ),
     "ONBOARDING_ALREADY_SUBMITTED": (
         "This onboarding has already been submitted",
         "Nothing was sent twice. Open the application to see where it stands.",
@@ -428,7 +436,6 @@ UNTRANSLATED: frozenset[str] = frozenset(
         "PROVIDER_ACCOUNT_NOT_FOUND",
         "WALLET_ACCOUNT_NOT_READY",
         "WALLET_AWAITING_ADMIN_APPROVAL",
-        "WALLET_CLIENT_REFERENCE_IMMUTABLE",
         "WALLET_CUSTODY_NOT_CLAIMED",
         "WALLET_NOT_ACTIVE",
         "WALLET_NOT_FOUND",

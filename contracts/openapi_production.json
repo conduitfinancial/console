@@ -407,6 +407,10 @@
            },
            "type": "array"
           },
+          "resubmissionGuidance": {
+           "description": "Integrator guidance for the resubmission. Present only on a rejected application whose `resubmittable` is `true`. A fixed line \u2014 display or log it, do not parse it. Omitted on non-rejected applications and on final rejections.",
+           "type": "string"
+          },
           "resubmittable": {
            "description": "Whether a corrected application will be considered. `true`: correct the data and submit a fresh application. `false`: the decision is final, do not resubmit. Omitted on non-rejected applications.",
            "type": "boolean"
@@ -3497,6 +3501,10 @@
       },
       "type": "array"
      },
+     "resubmissionGuidance": {
+      "description": "Integrator guidance for the resubmission. Present only on a rejected application whose `resubmittable` is `true`. A fixed line \u2014 display or log it, do not parse it. Omitted on non-rejected applications and on final rejections.",
+      "type": "string"
+     },
      "resubmittable": {
       "description": "Whether a corrected application will be considered. `true`: correct the data and submit a fresh application. `false`: the decision is final, do not resubmit. Omitted on non-rejected applications.",
       "type": "boolean"
@@ -4073,6 +4081,11 @@
           "id": {
            "description": "Unique customer identifier",
            "pattern": "^cus_[0-9A-Za-z]{22}$",
+           "type": "string"
+          },
+          "individualId": {
+           "description": "ID of the account holder's identity record. Send it as `ownership.persons[0].id` to edit the account holder through POST /customers/{customerId}/updates.",
+           "pattern": "^ind_[0-9A-Za-z]{22}$",
            "type": "string"
           },
           "isHouseAccount": {
@@ -4893,6 +4906,7 @@
           "features",
           "isHouseAccount",
           "type",
+          "individualId",
           "firstName",
           "lastName",
           "email",
@@ -5890,7 +5904,7 @@
      },
      "ownership": {
       "additionalProperties": {},
-      "description": "Beneficial-owner and controlling-person disclosure under `persons[]`. Persons are natural people: disclose a corporate owner under `relatedCompany` and look through it to the individuals behind it. Sending `ownership.persons` replaces the full owner set: to edit an existing owner, include its `id` (from a customer read) plus the fields you want to change; omit `id` to add a new owner (full identity required); owners not listed are removed.",
+      "description": "Beneficial-owner and controlling-person disclosure under `persons[]`. Persons are natural people: disclose a corporate owner under `relatedCompany` and look through it to the individuals behind it. Business customer: sending `ownership.persons` replaces the full owner set \u2014 to edit an existing owner, include its `id` (from a customer read) plus the fields you want to change; omit `id` to add a new owner (full identity required); owners not listed are removed. Individual customer: send exactly the account holder as one entry whose `id` is the `individualId` from the customer read, with no `roles`; adding a person, omitting the id, or sending roles returns 400.",
       "properties": {
        "persons": {
         "items": {
@@ -5988,7 +6002,8 @@
             "enum": [
              "BENEFICIAL_OWNER",
              "CONTROLLING_PERSON",
-             "LEGAL_REPRESENTATIVE"
+             "LEGAL_REPRESENTATIVE",
+             "ACCOUNT_HOLDER"
             ],
             "type": "string"
            },
@@ -6072,6 +6087,24 @@
       "additionalProperties": {},
       "description": "Regulatory and adverse-action history. Send only the leaves you want to change.",
       "properties": {
+       "adverseActions": {
+        "description": "Adverse Actions",
+        "items": {
+         "enum": [
+          "Sanctions",
+          "Regulatory enforcement",
+          "Criminal investigation",
+          "Civil litigation",
+          "Bankruptcy/insolvency",
+          "Account closure/termination",
+          "Consent order",
+          "Seizure/forfeiture",
+          "None"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       },
        "adverseActionsDetails": {
         "description": "Adverse Actions Details",
         "type": "string"
@@ -6108,6 +6141,10 @@
        },
        "hasUSBankAccount": {
         "description": "Existing US Bank Account?",
+        "type": "boolean"
+       },
+       "isPoliticallyExposedPerson": {
+        "description": "Yes if the account holder is \u2014 or is a close family member or known associate of \u2014 a current or former senior government official, head of state, senior politician, judge, or military officer. This is the standard 'Politically Exposed Person' (PEP) definition.",
         "type": "boolean"
        },
        "ownersDirectorsAdverseActions": {
@@ -9370,7 +9407,7 @@
    "DocumentCreateResponseDto": {
     "properties": {
      "classificationStatus": {
-      "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file.",
+      "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file. A document that is never submitted with an application stays `pending`, a payout or order supporting document included.",
       "enum": [
        "pending",
        "completed",
@@ -9444,7 +9481,7 @@
       "type": "string"
      },
      "purpose": {
-      "description": "Purpose of the document within the onboarding or KYC flow.",
+      "description": "What the document was uploaded for, as declared by the uploader. Omitted when the upload declared none. Only a `transaction_support` document can be attached to a payout or an order.",
       "enum": [
        "organization_onboarding",
        "kyc",
@@ -9495,7 +9532,7 @@
       "items": {
        "properties": {
         "classificationStatus": {
-         "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file.",
+         "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file. A document that is never submitted with an application stays `pending`, a payout or order supporting document included.",
          "enum": [
           "pending",
           "completed",
@@ -9569,7 +9606,7 @@
          "type": "string"
         },
         "purpose": {
-         "description": "Purpose of the document within the onboarding or KYC flow.",
+         "description": "What the document was uploaded for, as declared by the uploader. Omitted when the upload declared none. Only a `transaction_support` document can be attached to a payout or an order.",
          "enum": [
           "organization_onboarding",
           "kyc",
@@ -9642,7 +9679,7 @@
    "DocumentResponseDto": {
     "properties": {
      "classificationStatus": {
-      "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file.",
+      "description": "Server-side classifier lifecycle: `pending` (not yet run), `completed` (a verdict was produced \u2014 the type set may be empty), or `failed` (the classifier could not complete: the file may be unreadable, or a transient vendor/network error was exhausted). Transient failures are re-attempted on the next review run; a persistent `failed` warrants re-uploading a clearer file. A document that is never submitted with an application stays `pending`, a payout or order supporting document included.",
       "enum": [
        "pending",
        "completed",
@@ -9716,7 +9753,7 @@
       "type": "string"
      },
      "purpose": {
-      "description": "Purpose of the document within the onboarding or KYC flow.",
+      "description": "What the document was uploaded for, as declared by the uploader. Omitted when the upload declared none. Only a `transaction_support` document can be attached to a payout or an order.",
       "enum": [
        "organization_onboarding",
        "kyc",
@@ -13185,6 +13222,132 @@
          },
          "type": "array"
         },
+        "conditionalOverrides": {
+         "description": "Extra constraints that apply only while their own conditions hold. Each element carries a `conditions` array read exactly like the field's own `conditions` \u2014 every condition must hold, and `scope: 'person'` resolves the pointer against the current `ownership.persons[i]` row \u2014 plus the `constraints` submit adds for that case. Two cases ship. An address states what submit keys on that address's own country: a person's `/address/state` carries the US subdivision pattern and `/address/postalCode` the US ZIP pattern while that same person's `/address/country` is `USA` (`scope: 'person'`), and the business's `/operatingAddress/state` and `/operatingAddress/postalCode` carry the same two while `/operatingAddress/country` is `USA`, read at the root of the body because the condition names no scope. A person's `/taxIdNumber` carries the US Social Security Number pattern while that same person's `/taxIdType` is `SSN`. Some overrides' `pattern` states only the canonical value to send, not the full set submit accepts: the US subdivision pattern states the two-letter code with or without the `US-` prefix, while submit also accepts the full state name and other spellings. Apply every element whose conditions hold ON TOP OF the field's own `constraints`, never in place of them: the value must match the field-level `pattern` and every override `pattern` that applies, and a bound named twice tightens to the stricter value. The property is additive and a client may ignore it, in which case the field reads exactly as it did before the property existed and submit can still reject a value the override would have named. Silently absent when the field carries no conditional case.",
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "conditions": {
+            "description": "Conditions that must ALL hold for this override to apply. Same shape and evaluation as `conditions` on the field itself, `scope` included.",
+            "items": {
+             "additionalProperties": false,
+             "properties": {
+              "operator": {
+               "description": "Comparison operator. The field is required / applies only when the condition evaluates true against the current submitted data.",
+               "enum": [
+                "eq",
+                "in",
+                "not_in",
+                "exists",
+                "is_true",
+                "is_false"
+               ],
+               "example": "eq",
+               "type": "string"
+              },
+              "pointer": {
+               "description": "RFC 6901 JSON Pointer to the submitted-data field this condition reads. Resolution is governed by the sibling scope (root by default; person-scoped when scope='person').",
+               "example": "/companyClassification/legalStructure",
+               "type": "string"
+              },
+              "scope": {
+               "description": "Evaluation scope for `pointer`. Default `root` evaluates against the top-level submission; `person` evaluates against the current `ownership.persons[i]` row (used inside `individualRequirements[].fields[].conditions`).",
+               "enum": [
+                "root",
+                "person"
+               ],
+               "type": "string"
+              },
+              "value": {
+               "description": "Single comparison value, used with eq / exists operators",
+               "type": "string"
+              },
+              "values": {
+               "description": "Array of comparison values, used with in / not_in operators",
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              }
+             },
+             "required": [
+              "pointer",
+              "operator"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "constraints": {
+            "additionalProperties": false,
+            "description": "Constraints submit adds while the conditions hold. They narrow the field, never widen it, and they do not replace the field's own `constraints`: `pattern` is a SECOND regex that states the canonical form for this case, applied as well as the field-level `pattern`, and a bound named on both takes whichever value is stricter. As at field level, submit can be more lenient than some of these patterns state. `example` is a value valid under this override.",
+            "properties": {
+             "example": {
+              "description": "Example value matching the pattern",
+              "example": "12.345.678/0001-95",
+              "type": "string"
+             },
+             "format": {
+              "description": "Advertised server-enforced semantic format marker. Closed enum: `safeString` (structured short fields \u2014 rejects control characters, HTML tags, and punctuation outside the documented allowlist) or `prose` (free-text fields \u2014 allows ordinary punctuation and multi-line text, rejecting control characters, invisible-format characters, line/paragraph separators, and lone surrogates). The server enforces the rule at submit; the marker advertises it so clients can pre-validate. Arbitrary regex aliases belong in `pattern`.",
+              "enum": [
+               "safeString",
+               "prose"
+              ],
+              "type": "string"
+             },
+             "max": {
+              "description": "Maximum numeric value",
+              "type": "number"
+             },
+             "maxDate": {
+              "description": "Latest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+              "example": "today",
+              "type": "string"
+             },
+             "maxLength": {
+              "description": "Maximum string length",
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+             },
+             "min": {
+              "description": "Minimum numeric value",
+              "type": "number"
+             },
+             "minAgeYears": {
+              "description": "Minimum age in years (for date-of-birth-style fields)",
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+             },
+             "minDate": {
+              "description": "Earliest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+              "example": "1800-01-01",
+              "type": "string"
+             },
+             "minLength": {
+              "description": "Minimum string length",
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer"
+             },
+             "pattern": {
+              "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
+              "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
+              "type": "string"
+             }
+            },
+            "type": "object"
+           }
+          },
+          "required": [
+           "conditions",
+           "constraints"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
         "conditions": {
          "description": "Conditional applicability rules. The field applies (is shown / required) only when every condition evaluates true against the current submission. Empty / absent means unconditional.",
          "items": {
@@ -13238,7 +13401,7 @@
         },
         "constraints": {
          "additionalProperties": false,
-         "description": "Per-value constraints integrators should enforce client-side; the server enforces the same set at submit.",
+         "description": "Per-value limits on this field alone, enforceable client-side. Satisfying them does not by itself clear submit: a value must also satisfy the field's `allowedValues`, its `mustEqual`, and every `conditionalOverride` whose conditions hold. Some `pattern` values state only a canonical spelling, and submit can accept equivalent spellings such a pattern does not list.",
          "properties": {
           "example": {
            "description": "Example value matching the pattern",
@@ -13290,7 +13453,7 @@
            "type": "integer"
           },
           "pattern": {
-           "description": "Regex the submitted value must match",
+           "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
            "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
            "type": "string"
           }
@@ -13298,7 +13461,7 @@
          "type": "object"
         },
         "group": {
-         "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `regulatoryHistory`, `certification`). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
+         "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `activity`, `regulatoryHistory`, `certification`; `activity` carries an individual subject's own activity envelope, where `businessActivity` carries a business subject's). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
          "type": "string"
         },
         "helpText": {
@@ -13485,6 +13648,132 @@
               },
               "type": "array"
              },
+             "conditionalOverrides": {
+              "description": "Extra constraints that apply only while their own conditions hold. Each element carries a `conditions` array read exactly like the field's own `conditions` \u2014 every condition must hold, and `scope: 'person'` resolves the pointer against the current `ownership.persons[i]` row \u2014 plus the `constraints` submit adds for that case. Two cases ship. An address states what submit keys on that address's own country: a person's `/address/state` carries the US subdivision pattern and `/address/postalCode` the US ZIP pattern while that same person's `/address/country` is `USA` (`scope: 'person'`), and the business's `/operatingAddress/state` and `/operatingAddress/postalCode` carry the same two while `/operatingAddress/country` is `USA`, read at the root of the body because the condition names no scope. A person's `/taxIdNumber` carries the US Social Security Number pattern while that same person's `/taxIdType` is `SSN`. Some overrides' `pattern` states only the canonical value to send, not the full set submit accepts: the US subdivision pattern states the two-letter code with or without the `US-` prefix, while submit also accepts the full state name and other spellings. Apply every element whose conditions hold ON TOP OF the field's own `constraints`, never in place of them: the value must match the field-level `pattern` and every override `pattern` that applies, and a bound named twice tightens to the stricter value. The property is additive and a client may ignore it, in which case the field reads exactly as it did before the property existed and submit can still reject a value the override would have named. Silently absent when the field carries no conditional case.",
+              "items": {
+               "additionalProperties": false,
+               "properties": {
+                "conditions": {
+                 "description": "Conditions that must ALL hold for this override to apply. Same shape and evaluation as `conditions` on the field itself, `scope` included.",
+                 "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                   "operator": {
+                    "description": "Comparison operator. The field is required / applies only when the condition evaluates true against the current submitted data.",
+                    "enum": [
+                     "eq",
+                     "in",
+                     "not_in",
+                     "exists",
+                     "is_true",
+                     "is_false"
+                    ],
+                    "example": "eq",
+                    "type": "string"
+                   },
+                   "pointer": {
+                    "description": "RFC 6901 JSON Pointer to the submitted-data field this condition reads. Resolution is governed by the sibling scope (root by default; person-scoped when scope='person').",
+                    "example": "/companyClassification/legalStructure",
+                    "type": "string"
+                   },
+                   "scope": {
+                    "description": "Evaluation scope for `pointer`. Default `root` evaluates against the top-level submission; `person` evaluates against the current `ownership.persons[i]` row (used inside `individualRequirements[].fields[].conditions`).",
+                    "enum": [
+                     "root",
+                     "person"
+                    ],
+                    "type": "string"
+                   },
+                   "value": {
+                    "description": "Single comparison value, used with eq / exists operators",
+                    "type": "string"
+                   },
+                   "values": {
+                    "description": "Array of comparison values, used with in / not_in operators",
+                    "items": {
+                     "type": "string"
+                    },
+                    "type": "array"
+                   }
+                  },
+                  "required": [
+                   "pointer",
+                   "operator"
+                  ],
+                  "type": "object"
+                 },
+                 "type": "array"
+                },
+                "constraints": {
+                 "additionalProperties": false,
+                 "description": "Constraints submit adds while the conditions hold. They narrow the field, never widen it, and they do not replace the field's own `constraints`: `pattern` is a SECOND regex that states the canonical form for this case, applied as well as the field-level `pattern`, and a bound named on both takes whichever value is stricter. As at field level, submit can be more lenient than some of these patterns state. `example` is a value valid under this override.",
+                 "properties": {
+                  "example": {
+                   "description": "Example value matching the pattern",
+                   "example": "12.345.678/0001-95",
+                   "type": "string"
+                  },
+                  "format": {
+                   "description": "Advertised server-enforced semantic format marker. Closed enum: `safeString` (structured short fields \u2014 rejects control characters, HTML tags, and punctuation outside the documented allowlist) or `prose` (free-text fields \u2014 allows ordinary punctuation and multi-line text, rejecting control characters, invisible-format characters, line/paragraph separators, and lone surrogates). The server enforces the rule at submit; the marker advertises it so clients can pre-validate. Arbitrary regex aliases belong in `pattern`.",
+                   "enum": [
+                    "safeString",
+                    "prose"
+                   ],
+                   "type": "string"
+                  },
+                  "max": {
+                   "description": "Maximum numeric value",
+                   "type": "number"
+                  },
+                  "maxDate": {
+                   "description": "Latest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+                   "example": "today",
+                   "type": "string"
+                  },
+                  "maxLength": {
+                   "description": "Maximum string length",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "min": {
+                   "description": "Minimum numeric value",
+                   "type": "number"
+                  },
+                  "minAgeYears": {
+                   "description": "Minimum age in years (for date-of-birth-style fields)",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "minDate": {
+                   "description": "Earliest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+                   "example": "1800-01-01",
+                   "type": "string"
+                  },
+                  "minLength": {
+                   "description": "Minimum string length",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "pattern": {
+                   "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
+                   "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
+                   "type": "string"
+                  }
+                 },
+                 "type": "object"
+                }
+               },
+               "required": [
+                "conditions",
+                "constraints"
+               ],
+               "type": "object"
+              },
+              "type": "array"
+             },
              "conditions": {
               "description": "Conditional applicability rules. The field applies (is shown / required) only when every condition evaluates true against the current submission. Empty / absent means unconditional.",
               "items": {
@@ -13538,7 +13827,7 @@
              },
              "constraints": {
               "additionalProperties": false,
-              "description": "Per-value constraints integrators should enforce client-side; the server enforces the same set at submit.",
+              "description": "Per-value limits on this field alone, enforceable client-side. Satisfying them does not by itself clear submit: a value must also satisfy the field's `allowedValues`, its `mustEqual`, and every `conditionalOverride` whose conditions hold. Some `pattern` values state only a canonical spelling, and submit can accept equivalent spellings such a pattern does not list.",
               "properties": {
                "example": {
                 "description": "Example value matching the pattern",
@@ -13590,7 +13879,7 @@
                 "type": "integer"
                },
                "pattern": {
-                "description": "Regex the submitted value must match",
+                "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
                 "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
                 "type": "string"
                }
@@ -13598,7 +13887,7 @@
               "type": "object"
              },
              "group": {
-              "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `regulatoryHistory`, `certification`). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
+              "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `activity`, `regulatoryHistory`, `certification`; `activity` carries an individual subject's own activity envelope, where `businessActivity` carries a business subject's). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
               "type": "string"
              },
              "helpText": {
@@ -13814,6 +14103,132 @@
               },
               "type": "array"
              },
+             "conditionalOverrides": {
+              "description": "Extra constraints that apply only while their own conditions hold. Each element carries a `conditions` array read exactly like the field's own `conditions` \u2014 every condition must hold, and `scope: 'person'` resolves the pointer against the current `ownership.persons[i]` row \u2014 plus the `constraints` submit adds for that case. Two cases ship. An address states what submit keys on that address's own country: a person's `/address/state` carries the US subdivision pattern and `/address/postalCode` the US ZIP pattern while that same person's `/address/country` is `USA` (`scope: 'person'`), and the business's `/operatingAddress/state` and `/operatingAddress/postalCode` carry the same two while `/operatingAddress/country` is `USA`, read at the root of the body because the condition names no scope. A person's `/taxIdNumber` carries the US Social Security Number pattern while that same person's `/taxIdType` is `SSN`. Some overrides' `pattern` states only the canonical value to send, not the full set submit accepts: the US subdivision pattern states the two-letter code with or without the `US-` prefix, while submit also accepts the full state name and other spellings. Apply every element whose conditions hold ON TOP OF the field's own `constraints`, never in place of them: the value must match the field-level `pattern` and every override `pattern` that applies, and a bound named twice tightens to the stricter value. The property is additive and a client may ignore it, in which case the field reads exactly as it did before the property existed and submit can still reject a value the override would have named. Silently absent when the field carries no conditional case.",
+              "items": {
+               "additionalProperties": false,
+               "properties": {
+                "conditions": {
+                 "description": "Conditions that must ALL hold for this override to apply. Same shape and evaluation as `conditions` on the field itself, `scope` included.",
+                 "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                   "operator": {
+                    "description": "Comparison operator. The field is required / applies only when the condition evaluates true against the current submitted data.",
+                    "enum": [
+                     "eq",
+                     "in",
+                     "not_in",
+                     "exists",
+                     "is_true",
+                     "is_false"
+                    ],
+                    "example": "eq",
+                    "type": "string"
+                   },
+                   "pointer": {
+                    "description": "RFC 6901 JSON Pointer to the submitted-data field this condition reads. Resolution is governed by the sibling scope (root by default; person-scoped when scope='person').",
+                    "example": "/companyClassification/legalStructure",
+                    "type": "string"
+                   },
+                   "scope": {
+                    "description": "Evaluation scope for `pointer`. Default `root` evaluates against the top-level submission; `person` evaluates against the current `ownership.persons[i]` row (used inside `individualRequirements[].fields[].conditions`).",
+                    "enum": [
+                     "root",
+                     "person"
+                    ],
+                    "type": "string"
+                   },
+                   "value": {
+                    "description": "Single comparison value, used with eq / exists operators",
+                    "type": "string"
+                   },
+                   "values": {
+                    "description": "Array of comparison values, used with in / not_in operators",
+                    "items": {
+                     "type": "string"
+                    },
+                    "type": "array"
+                   }
+                  },
+                  "required": [
+                   "pointer",
+                   "operator"
+                  ],
+                  "type": "object"
+                 },
+                 "type": "array"
+                },
+                "constraints": {
+                 "additionalProperties": false,
+                 "description": "Constraints submit adds while the conditions hold. They narrow the field, never widen it, and they do not replace the field's own `constraints`: `pattern` is a SECOND regex that states the canonical form for this case, applied as well as the field-level `pattern`, and a bound named on both takes whichever value is stricter. As at field level, submit can be more lenient than some of these patterns state. `example` is a value valid under this override.",
+                 "properties": {
+                  "example": {
+                   "description": "Example value matching the pattern",
+                   "example": "12.345.678/0001-95",
+                   "type": "string"
+                  },
+                  "format": {
+                   "description": "Advertised server-enforced semantic format marker. Closed enum: `safeString` (structured short fields \u2014 rejects control characters, HTML tags, and punctuation outside the documented allowlist) or `prose` (free-text fields \u2014 allows ordinary punctuation and multi-line text, rejecting control characters, invisible-format characters, line/paragraph separators, and lone surrogates). The server enforces the rule at submit; the marker advertises it so clients can pre-validate. Arbitrary regex aliases belong in `pattern`.",
+                   "enum": [
+                    "safeString",
+                    "prose"
+                   ],
+                   "type": "string"
+                  },
+                  "max": {
+                   "description": "Maximum numeric value",
+                   "type": "number"
+                  },
+                  "maxDate": {
+                   "description": "Latest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+                   "example": "today",
+                   "type": "string"
+                  },
+                  "maxLength": {
+                   "description": "Maximum string length",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "min": {
+                   "description": "Minimum numeric value",
+                   "type": "number"
+                  },
+                  "minAgeYears": {
+                   "description": "Minimum age in years (for date-of-birth-style fields)",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "minDate": {
+                   "description": "Earliest allowed date as ISO 8601 (YYYY-MM-DD) or the literal 'today'",
+                   "example": "1800-01-01",
+                   "type": "string"
+                  },
+                  "minLength": {
+                   "description": "Minimum string length",
+                   "maximum": 9007199254740991,
+                   "minimum": -9007199254740991,
+                   "type": "integer"
+                  },
+                  "pattern": {
+                   "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
+                   "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
+                   "type": "string"
+                  }
+                 },
+                 "type": "object"
+                }
+               },
+               "required": [
+                "conditions",
+                "constraints"
+               ],
+               "type": "object"
+              },
+              "type": "array"
+             },
              "conditions": {
               "description": "Conditional applicability rules. The field applies (is shown / required) only when every condition evaluates true against the current submission. Empty / absent means unconditional.",
               "items": {
@@ -13867,7 +14282,7 @@
              },
              "constraints": {
               "additionalProperties": false,
-              "description": "Per-value constraints integrators should enforce client-side; the server enforces the same set at submit.",
+              "description": "Per-value limits on this field alone, enforceable client-side. Satisfying them does not by itself clear submit: a value must also satisfy the field's `allowedValues`, its `mustEqual`, and every `conditionalOverride` whose conditions hold. Some `pattern` values state only a canonical spelling, and submit can accept equivalent spellings such a pattern does not list.",
               "properties": {
                "example": {
                 "description": "Example value matching the pattern",
@@ -13919,7 +14334,7 @@
                 "type": "integer"
                },
                "pattern": {
-                "description": "Regex the submitted value must match",
+                "description": "Regex stating the canonical form of the value. A value that matches it is in the form submit expects; for some fields, submit is more lenient than this pattern and can accept spellings it does not state, so a value outside it is not always refused.",
                 "example": "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$",
                 "type": "string"
                }
@@ -13927,7 +14342,7 @@
               "type": "object"
              },
              "group": {
-              "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `regulatoryHistory`, `certification`). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
+              "description": "Section grouping code for renderers. Stable camelCase token drawn from a closed set per discovery context (onboarding today: `businessInfo`, `companyClassification`, `registeredAddress`, `operatingAddress`, `businessActivity`, `activity`, `regulatoryHistory`, `certification`; `activity` carries an individual subject's own activity envelope, where `businessActivity` carries a business subject's). Omitted on top-level scalars without a section and on fields nested inside `individualRequirements[].fields[]` (already a logical group). Presentation metadata; submit ignores it.",
               "type": "string"
              },
              "helpText": {
@@ -14166,6 +14581,12 @@
        "code"
       ],
       "type": "object"
+     },
+     "clientReferenceId": {
+      "description": "Client-supplied reference for the application this feature request creates. Stored on that application and echoed on it, so GET /v2/applications?clientReferenceId= finds it again. 1-255 characters from A-Za-z, 0-9, underscore, hyphen, colon, and period \u2014 no spaces.",
+      "example": "ext-feature-001",
+      "pattern": "^[A-Za-z0-9_\\-:.]{1,255}$",
+      "type": "string"
      },
      "documentIds": {
       "description": "Flat list of uploaded document IDs to associate with this feature request",
@@ -15119,7 +15540,8 @@
               "enum": [
                "BENEFICIAL_OWNER",
                "CONTROLLING_PERSON",
-               "LEGAL_REPRESENTATIVE"
+               "LEGAL_REPRESENTATIVE",
+               "ACCOUNT_HOLDER"
               ],
               "type": "string"
              },
@@ -15201,6 +15623,24 @@
        "regulatoryHistory": {
         "description": "Regulatory and adverse-action history.",
         "properties": {
+         "adverseActions": {
+          "description": "Adverse Actions",
+          "items": {
+           "enum": [
+            "Sanctions",
+            "Regulatory enforcement",
+            "Criminal investigation",
+            "Civil litigation",
+            "Bankruptcy/insolvency",
+            "Account closure/termination",
+            "Consent order",
+            "Seizure/forfeiture",
+            "None"
+           ],
+           "type": "string"
+          },
+          "type": "array"
+         },
          "adverseActionsDetails": {
           "description": "Adverse Actions Details",
           "type": "string"
@@ -15237,6 +15677,10 @@
          },
          "hasUSBankAccount": {
           "description": "Existing US Bank Account?",
+          "type": "boolean"
+         },
+         "isPoliticallyExposedPerson": {
+          "description": "Yes if the account holder is \u2014 or is a close family member or known associate of \u2014 a current or former senior government official, head of state, senior politician, judge, or military officer. This is the standard 'Politically Exposed Person' (PEP) definition.",
           "type": "boolean"
          },
          "ownersDirectorsAdverseActions": {
@@ -18171,6 +18615,11 @@
       "pattern": "^cus_[0-9A-Za-z]{22}$",
       "type": "string"
      },
+     "individualId": {
+      "description": "ID of the account holder's identity record. Send it as `ownership.persons[0].id` to edit the account holder through POST /customers/{customerId}/updates.",
+      "pattern": "^ind_[0-9A-Za-z]{22}$",
+      "type": "string"
+     },
      "isHouseAccount": {
       "description": "Whether this customer is the organization's own house account rather than an external customer. Read-only on live; on sandbox, set it with `PATCH /v2/sandbox/customers/{customerId}/house-account`.",
       "example": false,
@@ -18989,6 +19438,7 @@
      "features",
      "isHouseAccount",
      "type",
+     "individualId",
      "firstName",
      "lastName",
      "email",
@@ -19046,6 +19496,336 @@
    "OnboardingSubmitDto": {
     "additionalProperties": false,
     "properties": {
+     "activity": {
+      "additionalProperties": {},
+      "description": "Account holder's activity and due-diligence descriptors on an individual application: occupation, employer, account purpose, source of funds, expected volumes and countries of activity. Individual applications only. The account holder's activity and due-diligence descriptors.",
+      "properties": {
+       "accountPurpose": {
+        "description": "Select every account use case that applies, even those that are infrequent. This drives risk-tier categorisation and monitoring thresholds.",
+        "items": {
+         "enum": [
+          "Treasury Management",
+          "Payroll",
+          "Vendor/Supplier Payments",
+          "Operating Expenses",
+          "Client Collections",
+          "Investment",
+          "FX Settlement",
+          "Escrow",
+          "Other"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "countriesOfActivity": {
+        "description": "Countries where the account holder receives payments, sends payments, or holds assets.",
+        "items": {
+         "enum": [
+          "AFG",
+          "ALB",
+          "DZA",
+          "ASM",
+          "AND",
+          "AGO",
+          "AIA",
+          "ATA",
+          "ATG",
+          "ARG",
+          "ARM",
+          "ABW",
+          "AUS",
+          "AUT",
+          "AZE",
+          "BHS",
+          "BHR",
+          "BGD",
+          "BRB",
+          "BLR",
+          "BEL",
+          "BLZ",
+          "BEN",
+          "BMU",
+          "BTN",
+          "BOL",
+          "BES",
+          "BIH",
+          "BWA",
+          "BVT",
+          "BRA",
+          "IOT",
+          "BRN",
+          "BGR",
+          "BFA",
+          "BDI",
+          "CPV",
+          "KHM",
+          "CMR",
+          "CAN",
+          "CYM",
+          "CAF",
+          "TCD",
+          "CHL",
+          "CHN",
+          "CXR",
+          "CCK",
+          "COL",
+          "COM",
+          "COG",
+          "COD",
+          "COK",
+          "CRI",
+          "CIV",
+          "HRV",
+          "CUB",
+          "CUW",
+          "CYP",
+          "CZE",
+          "DNK",
+          "DJI",
+          "DMA",
+          "DOM",
+          "ECU",
+          "EGY",
+          "SLV",
+          "GNQ",
+          "ERI",
+          "EST",
+          "SWZ",
+          "ETH",
+          "FLK",
+          "FRO",
+          "FJI",
+          "FIN",
+          "FRA",
+          "GUF",
+          "PYF",
+          "ATF",
+          "GAB",
+          "GMB",
+          "GEO",
+          "DEU",
+          "GHA",
+          "GIB",
+          "GRC",
+          "GRL",
+          "GRD",
+          "GLP",
+          "GUM",
+          "GTM",
+          "GGY",
+          "GIN",
+          "GNB",
+          "GUY",
+          "HTI",
+          "HMD",
+          "VAT",
+          "HND",
+          "HKG",
+          "HUN",
+          "ISL",
+          "IND",
+          "IDN",
+          "IRN",
+          "IRQ",
+          "IRL",
+          "IMN",
+          "ISR",
+          "ITA",
+          "JAM",
+          "JPN",
+          "JEY",
+          "JOR",
+          "KAZ",
+          "KEN",
+          "KIR",
+          "PRK",
+          "KOR",
+          "KWT",
+          "KGZ",
+          "LAO",
+          "LVA",
+          "LBN",
+          "LSO",
+          "LBR",
+          "LBY",
+          "LIE",
+          "LTU",
+          "LUX",
+          "MAC",
+          "MDG",
+          "MWI",
+          "MYS",
+          "MDV",
+          "MLI",
+          "MLT",
+          "MHL",
+          "MTQ",
+          "MRT",
+          "MUS",
+          "MYT",
+          "MEX",
+          "FSM",
+          "MDA",
+          "MCO",
+          "MNG",
+          "MNE",
+          "MSR",
+          "MAR",
+          "MOZ",
+          "MMR",
+          "NAM",
+          "NRU",
+          "NPL",
+          "NLD",
+          "NCL",
+          "NZL",
+          "NIC",
+          "NER",
+          "NGA",
+          "NIU",
+          "NFK",
+          "MKD",
+          "MNP",
+          "NOR",
+          "OMN",
+          "PAK",
+          "PLW",
+          "PSE",
+          "PAN",
+          "PNG",
+          "PRY",
+          "PER",
+          "PHL",
+          "PCN",
+          "POL",
+          "PRT",
+          "PRI",
+          "QAT",
+          "REU",
+          "ROU",
+          "RUS",
+          "RWA",
+          "BLM",
+          "SHN",
+          "KNA",
+          "LCA",
+          "MAF",
+          "SPM",
+          "VCT",
+          "WSM",
+          "SMR",
+          "STP",
+          "SAU",
+          "SEN",
+          "SRB",
+          "SYC",
+          "SLE",
+          "SGP",
+          "SXM",
+          "SVK",
+          "SVN",
+          "SLB",
+          "SOM",
+          "ZAF",
+          "SGS",
+          "SSD",
+          "ESP",
+          "LKA",
+          "SDN",
+          "SUR",
+          "SJM",
+          "SWE",
+          "CHE",
+          "SYR",
+          "TWN",
+          "TJK",
+          "TZA",
+          "THA",
+          "TLS",
+          "TGO",
+          "TKL",
+          "TON",
+          "TTO",
+          "TUN",
+          "TUR",
+          "TKM",
+          "TCA",
+          "TUV",
+          "UGA",
+          "UKR",
+          "ARE",
+          "GBR",
+          "USA",
+          "UMI",
+          "URY",
+          "UZB",
+          "VUT",
+          "VEN",
+          "VNM",
+          "VGB",
+          "VIR",
+          "WLF",
+          "ESH",
+          "YEM",
+          "ZMB",
+          "ZWE"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "employerName": {
+        "description": "The name of the account holder's current employer, if any.",
+        "maxLength": 255,
+        "type": "string"
+       },
+       "expectedMonthlyVolume": {
+        "description": "Expected average USD value flowing through the account each month, across all in- and out-bound transactions combined.",
+        "enum": [
+         "VOLUME_LT_10K",
+         "VOLUME_10K_50K",
+         "VOLUME_50K_250K",
+         "VOLUME_250K_1M",
+         "VOLUME_GT_1M"
+        ],
+        "type": "string"
+       },
+       "expectedTransactionsPerMonth": {
+        "description": "Expected number of transactions through the account each month, in- and out-bound combined.",
+        "enum": [
+         "<10",
+         "10-50",
+         "50-200",
+         "200-1,000",
+         "1,000+"
+        ],
+        "type": "string"
+       },
+       "occupation": {
+        "description": "The account holder's current occupation or profession. Describe the role, not the employer.",
+        "maxLength": 255,
+        "type": "string"
+       },
+       "sourceOfFunds": {
+        "description": "Where the money flowing into the account comes from. Select all that apply.",
+        "items": {
+         "enum": [
+          "Revenue/Sales",
+          "VC/PE Investment",
+          "Loans/Debt Financing",
+          "Government Grant",
+          "Personal/Founder Funds",
+          "Donations",
+          "Other"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
      "businessActivity": {
       "additionalProperties": {},
       "description": "Operating-activity descriptors. Which leaves are required for a given country comes from `GET /v2/onboarding/requirements`.",
@@ -20002,7 +20782,8 @@
             "enum": [
              "BENEFICIAL_OWNER",
              "CONTROLLING_PERSON",
-             "LEGAL_REPRESENTATIVE"
+             "LEGAL_REPRESENTATIVE",
+             "ACCOUNT_HOLDER"
             ],
             "type": "string"
            },
@@ -20086,6 +20867,24 @@
       "additionalProperties": {},
       "description": "Regulatory and adverse-action history. Which leaves are required for a given country comes from `GET /v2/onboarding/requirements`.",
       "properties": {
+       "adverseActions": {
+        "description": "Adverse Actions",
+        "items": {
+         "enum": [
+          "Sanctions",
+          "Regulatory enforcement",
+          "Criminal investigation",
+          "Civil litigation",
+          "Bankruptcy/insolvency",
+          "Account closure/termination",
+          "Consent order",
+          "Seizure/forfeiture",
+          "None"
+         ],
+         "type": "string"
+        },
+        "type": "array"
+       },
        "adverseActionsDetails": {
         "description": "Adverse Actions Details",
         "type": "string"
@@ -20122,6 +20921,10 @@
        },
        "hasUSBankAccount": {
         "description": "Existing US Bank Account?",
+        "type": "boolean"
+       },
+       "isPoliticallyExposedPerson": {
+        "description": "Yes if the account holder is \u2014 or is a close family member or known associate of \u2014 a current or former senior government official, head of state, senior politician, judge, or military officer. This is the standard 'Politically Exposed Person' (PEP) definition.",
         "type": "boolean"
        },
        "ownersDirectorsAdverseActions": {
@@ -20208,6 +21011,14 @@
        }
       },
       "type": "object"
+     },
+     "subjectType": {
+      "description": "The application subject. `business` (the default when omitted) onboards an entity; `individual` onboards a natural person, whose data goes under `ownership.persons[0]` and `activity`.",
+      "enum": [
+       "business",
+       "individual"
+      ],
+      "type": "string"
      }
     },
     "type": "object"
@@ -104969,6 +105780,10 @@
              "paymentReference": {
               "type": "string"
              },
+             "paymentReferenceRequired": {
+              "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+              "type": "boolean"
+             },
              "rails": {
               "description": "US domestic networks this account collects on. Every entry carries its own routing number; the payer picks one network.",
               "items": {
@@ -106049,6 +106864,10 @@
              "paymentReference": {
               "type": "string"
              },
+             "paymentReferenceRequired": {
+              "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+              "type": "boolean"
+             },
              "rails": {
               "items": {
                "properties": {
@@ -106730,6 +107549,10 @@
              },
              "paymentReference": {
               "type": "string"
+             },
+             "paymentReferenceRequired": {
+              "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+              "type": "boolean"
              },
              "rails": {
               "items": {
@@ -107413,6 +108236,10 @@
              },
              "paymentReference": {
               "type": "string"
+             },
+             "paymentReferenceRequired": {
+              "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+              "type": "boolean"
              },
              "rails": {
               "description": "UK domestic schemes this account collects on. Both address the same sort code and account number; the payer picks one.",
@@ -108564,6 +109391,10 @@
           "paymentReference": {
            "type": "string"
           },
+          "paymentReferenceRequired": {
+           "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+           "type": "boolean"
+          },
           "rails": {
            "description": "US domestic networks this account collects on. Every entry carries its own routing number; the payer picks one network.",
            "items": {
@@ -109644,6 +110475,10 @@
           "paymentReference": {
            "type": "string"
           },
+          "paymentReferenceRequired": {
+           "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+           "type": "boolean"
+          },
           "rails": {
            "items": {
             "properties": {
@@ -110325,6 +111160,10 @@
           },
           "paymentReference": {
            "type": "string"
+          },
+          "paymentReferenceRequired": {
+           "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+           "type": "boolean"
           },
           "rails": {
            "items": {
@@ -111008,6 +111847,10 @@
           },
           "paymentReference": {
            "type": "string"
+          },
+          "paymentReferenceRequired": {
+           "description": "True when the payer must put paymentReference in the transfer memo. The collecting account is shared, so the reference is what names the destination; a missing or incorrect one delays credit.",
+           "type": "boolean"
           },
           "rails": {
            "description": "UK domestic schemes this account collects on. Both address the same sort code and account number; the payer picks one.",
@@ -114422,7 +115265,7 @@
         }
        }
       },
-      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**FEATURE_ALREADY_EXISTS**: A feature with the same identifier already exists for this account."
+      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**FEATURE_ALREADY_EXISTS**: A feature with the same identifier already exists for this account.\n\n**CONFLICT**: The request conflicts with the current state of the resource. This usually means a duplicate or a state transition that is not allowed."
      },
      "415": {
       "content": {
@@ -114464,7 +115307,7 @@
         }
        }
       },
-      "description": "**CUSTOMER_NOT_ONBOARDED**: This operation requires the customer to have completed onboarding, but the customer has not been fully onboarded yet.\n\n**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`.\n\n**CRYPTO_NOT_AVAILABLE_IN_JURISDICTION**: Crypto wallet provisioning is not available for customers in this jurisdiction. The customer's registered country is on Conduit's restricted-country list for crypto products.\n\n**NO_ELIGIBLE_PROVIDER**: No banking provider is currently available to service a virtual account for this customer in the requested currency. Every provider that could serve the customer's country and industry is either restricted, unable to hold that currency, or has been taken offline."
+      "description": "**CUSTOMER_NOT_ONBOARDED**: This operation requires the customer to have completed onboarding, but the customer has not been fully onboarded yet.\n\n**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`.\n\n**CRYPTO_NOT_AVAILABLE_IN_JURISDICTION**: Crypto wallet provisioning is not available for customers in this jurisdiction. The customer's registered country is on Conduit's restricted-country list for crypto products.\n\n**NO_ELIGIBLE_PROVIDER**: No banking provider is currently available to service a virtual account for this customer in the requested currency. Every provider that could serve the customer's country and industry is either restricted, unable to hold that currency, or has been taken offline.\n\n**SUBJECT_REQUIREMENTS_NOT_AVAILABLE**: No requirements are available for the requested subject type in the current context \u2014 the country, provider, and organization conditions of the request \u2014 so it cannot be fulfilled. This does not assert that no requirements exist for the subject anywhere; it reports that none apply to this request. It is returned wherever a subject's requirements are read: onboarding discovery and submit, and feature-request discovery and submit. It is a deterministic state, not a transient outage: it does not resolve on retry."
      },
      "429": {
       "content": {
@@ -114700,7 +115543,7 @@
         }
        }
       },
-      "description": "**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`.\n\n**NO_ELIGIBLE_PROVIDER**: No banking provider is currently available to service a virtual account for this customer in the requested currency. Every provider that could serve the customer's country and industry is either restricted, unable to hold that currency, or has been taken offline."
+      "description": "**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`.\n\n**NO_ELIGIBLE_PROVIDER**: No banking provider is currently available to service a virtual account for this customer in the requested currency. Every provider that could serve the customer's country and industry is either restricted, unable to hold that currency, or has been taken offline.\n\n**SUBJECT_REQUIREMENTS_NOT_AVAILABLE**: No requirements are available for the requested subject type in the current context \u2014 the country, provider, and organization conditions of the request \u2014 so it cannot be fulfilled. This does not assert that no requirements exist for the subject anywhere; it reports that none apply to this request. It is returned wherever a subject's requirements are read: onboarding discovery and submit, and feature-request discovery and submit. It is a deterministic state, not a transient outage: it does not resolve on retry."
      },
      "429": {
       "content": {
@@ -115124,7 +115967,7 @@
   },
   "/customers/{customerId}/updates": {
    "post": {
-    "description": "Post-onboarding KYC update. Body shape matches `POST /v2/onboarding` (partial: send only the fields you want to change). Discover the available fields via `GET /v2/onboarding/requirements` with the customer's country; the update flow reuses the CUSTOMER_ONBOARDING rule set. For `companyClassification.primaryIndustry` and `businessActivity.regulatedOrRestrictedActivities`, discover the current catalog options via `GET /v2/onboarding/policy-subjects`.",
+    "description": "Post-onboarding KYC update. Body shape matches `POST /v2/onboarding` (partial: send only the fields you want to change). Discover the available fields via `GET /v2/onboarding/requirements` with the customer's country; the update flow reuses the CUSTOMER_ONBOARDING rule set. For `companyClassification.primaryIndustry` and `businessActivity.regulatedOrRestrictedActivities`, discover the current catalog options via `GET /v2/onboarding/policy-subjects`. The business envelopes and requirement discovery above apply to a business customer only. For an individual customer, edit the account holder as a single `ownership.persons` entry whose `id` is the `individualId` from the customer read, with no `roles` and only the person fields to change; sending a business envelope, a second person, a `roles`-bearing person, or a missing/foreign id returns 400. `documentIds` alone (no `ownership`) is a valid document-only update.",
     "operationId": "CustomersController_submitUpdate_v2",
     "parameters": [
      {
@@ -118004,7 +118847,7 @@
         }
        }
       },
-      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**WALLET_PROVIDER_CONFLICT**: The customer's wallet account is in a state \u2014 suspended, frozen, or errored \u2014 that cannot create wallets. This is distinct from an account that is still provisioning.\n\n**WALLET_ACCOUNT_NOT_READY**: The customer's wallet account is still provisioning and is not yet active, so wallet addresses cannot be created on it. Either a non-custodial claim is in flight and the account has not been created yet, or the account exists and is awaiting signer passkey enrollment.\n\n**WALLET_CUSTODY_NOT_CLAIMED**: The customer's wallet account is custodial, but custodial wallets are not enabled for this organization. Wallet addresses cannot be issued on a custodial account unless the custodial wallet path is enabled, and a custodial account cannot be claimed as non-custodial.\n\n**WALLET_AWAITING_ADMIN_APPROVAL**: This wallet is being provisioned through a ceremony that is awaiting admin approval.\n\n**CEREMONY_IN_FLIGHT**: A ceremony for this account is already in progress and the request would duplicate it. This happens for a signer roster change (a concurrent promote or demote of the same signer), or for a wallet create when a wallet for the same account is already being created (for example, requesting a second EVM chain while the first EVM chain's wallet is still being set up \u2014 the EVM chains share one address). The request is rejected until the in-flight ceremony finishes.\n\n**CONFLICT**: The request conflicts with the current state of the resource. This usually means a duplicate or a state transition that is not allowed.\n\n**WALLET_CLIENT_REFERENCE_IMMUTABLE**: The customer already holds a wallet on this chain, and a create cannot set or change its clientReferenceId. A wallet takes its clientReferenceId when it is created, and no endpoint changes it afterwards."
+      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**WALLET_PROVIDER_CONFLICT**: The customer's wallet account is in a state \u2014 suspended, frozen, or errored \u2014 that cannot create wallets. This is distinct from an account that is still provisioning.\n\n**WALLET_ACCOUNT_NOT_READY**: The customer's wallet account is still provisioning and is not yet active, so wallet addresses cannot be created on it. Either a non-custodial claim is in flight and the account has not been created yet, or the account exists and is awaiting signer passkey enrollment.\n\n**WALLET_CUSTODY_NOT_CLAIMED**: The customer's wallet account is custodial, but custodial wallets are not enabled for this organization. Wallet addresses cannot be issued on a custodial account unless the custodial wallet path is enabled, and a custodial account cannot be claimed as non-custodial.\n\n**WALLET_AWAITING_ADMIN_APPROVAL**: This wallet is being provisioned through a ceremony that is awaiting admin approval.\n\n**CEREMONY_IN_FLIGHT**: A ceremony for this account is already in progress and the request would duplicate it. This happens for a signer roster change (a concurrent promote or demote of the same signer), or for a wallet create when a wallet for the same account is already being created (for example, requesting a second EVM chain while the first EVM chain's wallet is still being set up \u2014 the EVM chains share one address). The request is rejected until the in-flight ceremony finishes.\n\n**CONFLICT**: The request conflicts with the current state of the resource. This usually means a duplicate or a state transition that is not allowed."
      },
      "415": {
       "content": {
@@ -120670,7 +121513,7 @@
     ]
    },
    "post": {
-    "description": "Uploads a file and creates a document record. You do not have to declare what the document is: Conduit identifies it, and its own determination is what applies. Sending `type` is optional and records which requirement slot you uploaded the file against, so the file is shown against that slot. Optional multipart fields: `purpose`, `name` (human-readable label) and `type`. Maximum file size is 10 MB; the request may contain at most 16 multipart fields in total. File type is determined by inspecting the file's contents \u2014 the `Content-Type` header and filename extension are advisory only.",
+    "description": "Uploads a file and creates a document record. `purpose` records what you will use the document for, and only your request sets it: send `purpose=transaction_support` to attach the document to a payout or an order, or the payout or order refuses the document id. Conduit identifies what the file contains, and its own determination is what applies; `classificationStatus` does not control attachment. Sending `type` is optional and records which requirement slot you uploaded the file against, so the file is shown against that slot. Optional multipart fields: `purpose`, `name` (human-readable label) and `type`. Maximum file size is 10 MB; the request may contain at most 16 multipart fields in total. File type is determined by inspecting the file's contents \u2014 the `Content-Type` header and filename extension are advisory only.",
     "operationId": "DocumentsController_create_v2",
     "parameters": [],
     "requestBody": {
@@ -120688,7 +121531,7 @@
           "type": "string"
          },
          "purpose": {
-          "description": "Purpose of the document.",
+          "description": "What the document is for. A payout or order accepts only `transaction_support` in `documents`; an RFI reply accepts only `rfi_response` in `documentIds`.",
           "enum": [
            "organization_onboarding",
            "kyc",
@@ -121789,7 +122632,7 @@
         }
        }
       },
-      "description": "**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`."
+      "description": "**ONBOARDING_NOT_READY**: The onboarding submission cannot be completed because one or more required fields or documents are still missing, or a submitted value is not one of the accepted options for a closed-set field (e.g. a country-specific field like `companyClassification.legalStructure`). Each blocker is reported per field in `errors[]` with a `category` and, for closed-set fields, the accepted `allowedValues`.\n\n**SUBJECT_REQUIREMENTS_NOT_AVAILABLE**: No requirements are available for the requested subject type in the current context \u2014 the country, provider, and organization conditions of the request \u2014 so it cannot be fulfilled. This does not assert that no requirements exist for the subject anywhere; it reports that none apply to this request. It is returned wherever a subject's requirements are read: onboarding discovery and submit, and feature-request discovery and submit. It is a deterministic state, not a transient outage: it does not resolve on retry."
      },
      "429": {
       "content": {
@@ -121968,10 +122811,32 @@
     "operationId": "OnboardingController_resolveDiscovery_v2",
     "parameters": [
      {
-      "description": "ISO 3166-1 alpha-2 or alpha-3 country code for the customer's primary jurisdiction.",
+      "description": "ISO 3166-1 alpha-2 or alpha-3 country code for the customer's primary jurisdiction. For an individual subject this is the account holder's country of residence.",
       "in": "query",
       "name": "country",
       "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The application subject. `business` (the default when omitted) onboards an entity; `individual` onboards a natural person, whose data goes under `ownership.persons[0]` and `activity`.",
+      "in": "query",
+      "name": "subjectType",
+      "required": false,
+      "schema": {
+       "enum": [
+        "business",
+        "individual"
+       ],
+       "type": "string"
+      }
+     },
+     {
+      "description": "The `key` of a `GET /v2/onboarding/policy-subjects?axis=industry` entry, submitted at `companyClassification.primaryIndustry`. Adds any fields, documents and person requirements tied to that industry to the returned `fields[]`, `documents[]`, and `individualRequirements[]`. Omit to get the industry-agnostic response. A business subject only: an individual carries no company classification, so passing it with `subjectType=individual` is rejected.",
+      "in": "query",
+      "name": "industry",
+      "required": false,
       "schema": {
        "type": "string"
       }
@@ -122007,7 +122872,7 @@
         }
        }
       },
-      "description": "**INVALID_OID_FORMAT**: A path or query parameter expected a valid object identifier but received a value that does not match the expected format."
+      "description": "**INVALID_OID_FORMAT**: A path or query parameter expected a valid object identifier but received a value that does not match the expected format.\n\n**VALIDATION_ERROR**: The request body or query parameters failed validation. One or more fields have invalid values, missing required properties, or incorrect types. Multipart file uploads that fail at the multipart-parser layer (unexpected form-field name, too many parts) carry an extra 'field' member naming the offending form-field.\n\n**INVALID_POLICY_SUBJECT**: The submitted catalog-backed classification key (e.g. `companyClassification.primaryIndustry`) is unknown, retired, not directly selectable, or does not match the field's expected subject kind. Valid options are surfaced by the discovery endpoint."
      },
      "401": {
       "content": {
@@ -122050,6 +122915,27 @@
        }
       },
       "description": "**NOT_FOUND**: The requested resource does not exist or you do not have access to it."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "example": {
+         "correlationId": "00469ea4-52c1-4ffa-bd05-9f28b236a5fe",
+         "detail": "No requirements are available for the requested subject type in the current context \u2014 the country, provider, and organization conditions of the request \u2014 so it cannot be fulfilled. This does not assert that no requirements exist for the subject anywhere; it reports that none apply to this request. It is returned wherever a subject's requirements are read: onboarding discovery and submit, and feature-request discovery and submit. It is a deterministic state, not a transient outage: it does not resolve on retry.",
+         "docs": "https://conduit-v2.mintlify.app/errors#subject-requirements-not-available",
+         "instance": "/v2/...",
+         "resolution": "This subject type is not available for your organization in this context at this time. Do not retry; contact support to learn when it becomes available.",
+         "status": 422,
+         "timestamp": "2026-01-15T09:30:00.000Z",
+         "title": "Subject Requirements Not Available",
+         "type": "SUBJECT_REQUIREMENTS_NOT_AVAILABLE"
+        },
+        "schema": {
+         "$ref": "#/components/schemas/ProblemDetailDto"
+        }
+       }
+      },
+      "description": "**SUBJECT_REQUIREMENTS_NOT_AVAILABLE**: No requirements are available for the requested subject type in the current context \u2014 the country, provider, and organization conditions of the request \u2014 so it cannot be fulfilled. This does not assert that no requirements exist for the subject anywhere; it reports that none apply to this request. It is returned wherever a subject's requirements are read: onboarding discovery and submit, and feature-request discovery and submit. It is a deterministic state, not a transient outage: it does not resolve on retry."
      },
      "429": {
       "content": {
@@ -122516,10 +123402,10 @@
        "application/json": {
         "example": {
          "correlationId": "00469ea4-52c1-4ffa-bd05-9f28b236a5fe",
-         "detail": "The requested source and destination asset pair is not supported.",
+         "detail": "The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one.",
          "docs": "https://conduit-v2.mintlify.app/errors#unsupported-pair",
          "instance": "/v2/...",
-         "resolution": "Submit a supported source/destination asset combination, or contact Conduit if this pair should be available.",
+         "resolution": "Submit a supported source/destination asset combination and chain, or contact Conduit if this pair should be available.",
          "status": 422,
          "timestamp": "2026-01-15T09:30:00.000Z",
          "title": "Unsupported Pair",
@@ -122530,7 +123416,7 @@
         }
        }
       },
-      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported.\n\n**INVALID_ORDER_COMBO**: The requested order combination is not supported: same-asset same-chain moves, mismatched source and destination resources, or an autoPayout shape that does not match the order direction. OFFRAMP orders require a fiat autoPayout (`{ rail, purpose, documents?, recipient }`); ONRAMP orders require a crypto autoPayout (`{ purpose, documents?, recipient: { chain, address, attestation } }`), self- or third-party-custody. `purpose` is required and drives the documentation / whitelist gate; `documents` are supporting-document ids. `recipient.chain` must match the destination wallet's chain.\n\n**NON_CUSTODIAL_SOURCE_NOT_SUPPORTED**: Non-custodial source wallets are supported on the EVM chains, Solana, and Tron. On Stellar, a non-custodial source is rejected at creation, because a source transfer on that chain cannot yet be co-signed and broadcast.\n\n**MISSING_REQUIRED_FIELDS**: The order request is missing one or more fields required for the destination shape.\n\n**RECIPIENT_VALIDATION_FAILED**: The supplied recipient or destination details failed validation for the chosen rail, chain, or corridor.\n\n**DESTINATION_NOT_ACTIVATED**: The destination account does not exist on the destination chain. On some chains an account must be activated on-chain before it can receive. The error detail names the chain.\n\n**DESTINATION_ASSET_NOT_ACCEPTED**: The destination account exists but cannot receive the requested asset now. The account has not opted in to the asset, the issuer froze the account's ability to hold it, or the account's holding limit leaves no room for this amount. The error detail and details.reason name the exact blocker.\n\n**AMOUNT_OUT_OF_RANGE**: The requested amount is below the minimum or above the maximum allowed, or the amount you send rounds to zero at its supported precision.\n\n**TRANSACTION_BLOCKED**: The transaction is blocked by policy. This decision is terminal.\n\n**PAYOUT_SELF_DESTINATION**: The payout's destination is the same virtual account it is sent from \u2014 either the recipient bank coordinates resolve to it, or it was named directly by id. Paying an account from itself moves no money.\n\n**PAYOUT_DESTINATION_RESTRICTED**: The recipient bank coordinates resolve to a Conduit-issued account that is currently restricted from receiving funds.\n\n**PAYOUT_RAIL_CURRENCY_MISMATCH**: The requested payment rail settles a different currency from the one the payout moves. A payout moves one currency and never converts, so this rail can never deliver it.\n\n**CLIENT_MARKUP_SPREAD_EXCEEDED**: The margin you declared, added to Conduit's own spread terms for the pair, reaches the point at which the quoted rate would fall to zero. It is raised on the order or the quote that declares the margin. The margin itself has no fixed maximum; what is left for it depends on the pair.\n\n**CLIENT_MARKUP_EXCEEDS_PAYOUT**: The margin declared on the chained auto-payout reaches the amount this order converts to. The leg is funded only by that converted output, out of which Conduit's own payout fee also comes, so the margin cannot be collected.\n\n**QUOTE_ASSET_MISMATCH**: The order's source or destination resource asset does not match the quote option's priced asset pair.\n\n**QUOTE_RECIPIENT_TYPE_UNPRICED**: The quote was priced with no recipient, but a recipient-type-scoped pricing rule applies to this order's payout recipient and would change the price. The quote's locked rate is not valid for this recipient."
+      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one.\n\n**INVALID_ORDER_COMBO**: The requested order combination is not supported: same-asset same-chain moves, mismatched source and destination resources, or an autoPayout shape that does not match the order direction. OFFRAMP orders require a fiat autoPayout (`{ rail, purpose, documents?, recipient }`); ONRAMP orders require a crypto autoPayout (`{ purpose, documents?, recipient: { chain, address, attestation } }`), self- or third-party-custody. `purpose` is required and drives the documentation / whitelist gate; `documents` are supporting-document ids. `recipient.chain` must match the destination wallet's chain.\n\n**NON_CUSTODIAL_SOURCE_NOT_SUPPORTED**: Non-custodial source wallets are supported on the EVM chains, Solana, and Tron. On Stellar, a non-custodial source is rejected at creation, because a source transfer on that chain cannot yet be co-signed and broadcast.\n\n**MISSING_REQUIRED_FIELDS**: The order request is missing one or more fields required for the destination shape.\n\n**RECIPIENT_VALIDATION_FAILED**: The supplied recipient or destination details failed validation for the chosen rail, chain, or corridor.\n\n**DESTINATION_NOT_ACTIVATED**: The destination account does not exist on the destination chain. On some chains an account must be activated on-chain before it can receive. The error detail names the chain.\n\n**DESTINATION_ASSET_NOT_ACCEPTED**: The destination account exists but cannot receive the requested asset now. The account has not opted in to the asset, the issuer froze the account's ability to hold it, or the account's holding limit leaves no room for this amount. The error detail and details.reason name the exact blocker.\n\n**AMOUNT_OUT_OF_RANGE**: The requested amount is below the minimum or above the maximum allowed, or the amount you send rounds to zero at its supported precision.\n\n**TRANSACTION_BLOCKED**: The transaction is blocked by policy. This decision is terminal.\n\n**PAYOUT_SELF_DESTINATION**: The payout's destination is the same virtual account it is sent from \u2014 either the recipient bank coordinates resolve to it, or it was named directly by id. Paying an account from itself moves no money.\n\n**PAYOUT_DESTINATION_RESTRICTED**: The recipient bank coordinates resolve to a Conduit-issued account that is currently restricted from receiving funds.\n\n**PAYOUT_RAIL_CURRENCY_MISMATCH**: The requested payment rail settles a different currency from the one the payout moves. A payout moves one currency and never converts, so this rail can never deliver it.\n\n**CLIENT_MARKUP_SPREAD_EXCEEDED**: The margin you declared, added to Conduit's own spread terms for the pair, reaches the point at which the quoted rate would fall to zero. It is raised on the order or the quote that declares the margin. The margin itself has no fixed maximum; what is left for it depends on the pair.\n\n**CLIENT_MARKUP_EXCEEDS_PAYOUT**: The margin declared on the chained auto-payout reaches the amount this order converts to. The leg is funded only by that converted output, out of which Conduit's own payout fee also comes, so the margin cannot be collected.\n\n**QUOTE_ASSET_MISMATCH**: The order's source or destination resource asset does not match the quote option's priced asset pair.\n\n**QUOTE_RECIPIENT_TYPE_UNPRICED**: The quote was priced with no recipient, but a recipient-type-scoped pricing rule applies to this order's payout recipient and would change the price. The quote's locked rate is not valid for this recipient."
      },
      "429": {
       "content": {
@@ -122878,10 +123764,10 @@
        "application/json": {
         "example": {
          "correlationId": "00469ea4-52c1-4ffa-bd05-9f28b236a5fe",
-         "detail": "The requested source and destination asset pair is not supported.",
+         "detail": "The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one.",
          "docs": "https://conduit-v2.mintlify.app/errors#unsupported-pair",
          "instance": "/v2/...",
-         "resolution": "Submit a supported source/destination asset combination, or contact Conduit if this pair should be available.",
+         "resolution": "Submit a supported source/destination asset combination and chain, or contact Conduit if this pair should be available.",
          "status": 422,
          "timestamp": "2026-01-15T09:30:00.000Z",
          "title": "Unsupported Pair",
@@ -122892,7 +123778,7 @@
         }
        }
       },
-      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported."
+      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one."
      },
      "429": {
       "content": {
@@ -124249,7 +125135,7 @@
         }
        }
       },
-      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**PAYOUT_NOT_CANCELLABLE**: The payout cannot be cancelled. Either it is already in a terminal state (completed, failed, or cancelled; re-cancelling a `cancelled` payout returns 200 idempotently, every other terminal returns 409), or its on-chain broadcast has begun and the cancel path can no longer safely unwind it.\n\n**PAYOUT_CANCEL_IN_PROGRESS**: The payout was just created and is not yet ready to accept the cancellation. The payout is still cancellable \u2014 this is a transient startup delay, not a terminal state."
+      "description": "**IDEMPOTENCY_KEY_CONFLICT**: The idempotency key was previously used with a different request body. Idempotency keys are bound to the exact request shape \u2014 replays must match the original.\n\n**IDEMPOTENCY_KEY_REQUEST_IN_PROGRESS**: An earlier request with this idempotency key has not finished, or stopped before its result was recorded. In the second case it may or may not have completed its work.\n\n**PAYOUT_NOT_CANCELLABLE**: The payout cannot be cancelled. Either it is already in a terminal state (completed, failed, or cancelled; re-cancelling a `cancelled` payout returns 200 idempotently, every other terminal returns 409), or its transfer was delivered before the cancel could take effect, or it is a fiat payout already enrolled in a wire batch.\n\n**PAYOUT_CANCEL_IN_PROGRESS**: The payout was just created and is not yet ready to accept the cancellation. The payout is still cancellable \u2014 this is a transient startup delay, not a terminal state."
      },
      "415": {
       "content": {
@@ -124416,10 +125302,10 @@
        "application/json": {
         "example": {
          "correlationId": "00469ea4-52c1-4ffa-bd05-9f28b236a5fe",
-         "detail": "The requested source and destination asset pair is not supported.",
+         "detail": "The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one.",
          "docs": "https://conduit-v2.mintlify.app/errors#unsupported-pair",
          "instance": "/v2/...",
-         "resolution": "Submit a supported source/destination asset combination, or contact Conduit if this pair should be available.",
+         "resolution": "Submit a supported source/destination asset combination and chain, or contact Conduit if this pair should be available.",
          "status": 422,
          "timestamp": "2026-01-15T09:30:00.000Z",
          "title": "Unsupported Pair",
@@ -124430,7 +125316,7 @@
         }
        }
       },
-      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported.\n\n**AMOUNT_OUT_OF_RANGE**: The requested amount is below the minimum or above the maximum allowed, or the amount you send rounds to zero at its supported precision.\n\n**CLIENT_MARKUP_SPREAD_EXCEEDED**: The margin you declared, added to Conduit's own spread terms for the pair, reaches the point at which the quoted rate would fall to zero. It is raised on the order or the quote that declares the margin. The margin itself has no fixed maximum; what is left for it depends on the pair."
+      "description": "**UNSUPPORTED_PAIR**: The requested source and destination asset pair is not supported. `details` carries `sourceChain` and `destinationChain` alongside `sourceAsset` and `destinationAsset` \u2014 `null` for a fiat asset, which carries no chain \u2014 so you can tell a chain-specific refusal from an asset-wide one.\n\n**AMOUNT_OUT_OF_RANGE**: The requested amount is below the minimum or above the maximum allowed, or the amount you send rounds to zero at its supported precision.\n\n**CLIENT_MARKUP_SPREAD_EXCEEDED**: The margin you declared, added to Conduit's own spread terms for the pair, reaches the point at which the quoted rate would fall to zero. It is raised on the order or the quote that declares the margin. The margin itself has no fixed maximum; what is left for it depends on the pair."
      },
      "429": {
       "content": {
@@ -126000,7 +126886,7 @@
   },
   "/transactions": {
    "get": {
-    "description": "Returns a paginated list of the caller's transactions. Filter by type, status, customer, asset, chain, transaction hash, external payment reference, linked order, creation timestamp, or settlement timestamp (`completedAfter`/`completedBefore`). Sorted by `createdAt desc` by default; use `sortBy` and `sortOrder` to override, including `sortBy=completedAt` to order by settlement date.",
+    "description": "Returns a paginated list of the caller's transactions. Filter by type, status, transaction id, customer, customer name, asset, chain, transaction hash, external payment reference, linked order, creation timestamp, or settlement timestamp (`completedAfter`/`completedBefore`). Sorted by `createdAt desc` by default; use `sortBy` and `sortOrder` to override, including `sortBy=completedAt` to order by settlement date.",
     "operationId": "TransactionsController_list_v2",
     "parameters": [
      {
@@ -126077,7 +126963,24 @@
      },
      {
       "in": "query",
+      "name": "id",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
       "name": "customerId",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "Case-insensitive partial match on the customer's name (business legal name or individual full name).",
+      "in": "query",
+      "name": "customerName",
       "required": false,
       "schema": {
        "type": "string"
@@ -126766,7 +127669,7 @@
   },
   "/wallets/registered-addresses/{id}": {
    "delete": {
-    "description": "Revokes a registered wallet address for the authenticated organization without deleting its audit history.",
+    "description": "Revokes a registered wallet address for the authenticated organization without deleting its audit history. Revoking an address that is already revoked succeeds and returns 204 rather than an error, so the call is safe to retry after a lost response.",
     "operationId": "RegisteredAddressesController_delete_v2",
     "parameters": [
      {
