@@ -25,7 +25,7 @@ jobs:
         # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
         # GitHub Actions service-container images, so this needs a manual bump
         # alongside deploy/docker-compose.yml's postgres pin.
-        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: conduit_console_test
@@ -54,7 +54,7 @@ jobs:
         # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
         # GitHub Actions service-container images, so this needs a manual bump
         # alongside deploy/docker-compose.yml's postgres pin.
-        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: conduit_console_test
@@ -83,7 +83,7 @@ jobs:
         # Pinned by digest, tag kept for humans. No dependabot ecosystem parses
         # GitHub Actions service-container images, so this needs a manual bump
         # alongside deploy/docker-compose.yml's postgres pin.
-        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: conduit_console_test
